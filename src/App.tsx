@@ -436,6 +436,10 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+
+    // Cache the gradient outside the animation loop
+    let gradient: CanvasGradient | null = null;
+
     let animationId: number;
     const draw = () => {
       const analyser = audioEngine.getMasterAnalyser();
@@ -448,17 +452,36 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
       const dataArray = new Uint8Array(bufferLength);
       analyser.getByteFrequencyData(dataArray);
 
-      ctx.fillStyle = '#070d1f';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const barWidth = (canvas.width / bufferLength) * 2;
+      if (!gradient) {
+        gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+        gradient.addColorStop(0, '#004965');
+        gradient.addColorStop(0.5, '#38bdf8');
+        gradient.addColorStop(0.8, '#56e5a9');
+        gradient.addColorStop(1, '#ffb4ab');
+      }
+
+      const barWidth = (canvas.width / bufferLength) * 2.5;
       let x = 0;
+
+      // Set styles once outside the loop
+      ctx.fillStyle = gradient;
+      // Use a fixed color for the shadow to avoid passing a gradient object
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 15;
 
       for (let i = 0; i < bufferLength; i++) {
         const barHeight = (dataArray[i] / 255) * canvas.height;
-        ctx.fillStyle = i % 10 === 0 ? '#56e5a9' : '#38bdf8';
-        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+        x += barWidth;
+      }
+
+      // Reset styles for scanlines
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.shadowBlur = 0;
+      for (let i = 0; i < canvas.height; i += 4) {
+        ctx.fillRect(0, i, canvas.width, 1);
       }
 
       animationId = requestAnimationFrame(draw);
@@ -1372,9 +1395,9 @@ export default function App() {
           }`}>
              {sequencer.isPlaying ? <Square className="w-4 h-4 md:w-5 md:h-5 fill-current" aria-hidden="true" /> : <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5" aria-hidden="true" />}
           </button>
-          <div className="hidden sm:block">
-            <div className="font-headline text-[10px] md:text-sm font-bold text-primary truncate max-w-[120px] md:max-w-[200px]">LIVE_STREAM_BUFFER</div>
-            <div className="font-headline text-[8px] md:text-[10px] text-outline uppercase tracking-widest">Master Feed • 48kHz / 24bit</div>
+          <div className="hidden sm:block industrial-futurism crt-scanlines p-2 rounded relative">
+            <div className="font-headline text-[10px] md:text-sm font-bold text-primary truncate max-w-[120px] md:max-w-[200px] telemetry-overlay">LIVE_STREAM_BUFFER</div>
+            <div className="font-headline text-[8px] md:text-[10px] text-outline uppercase tracking-widest relative z-10">Master Feed • 48kHz / 24bit</div>
           </div>
         </div>
 
