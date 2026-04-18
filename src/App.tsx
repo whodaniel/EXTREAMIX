@@ -982,82 +982,6 @@ export default function App() {
   ]);
   const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
   const [isTranscribing, setIsTranscribing] = useState(false);
-
-  // --- WebRTC Logic ---
-  useEffect(() => {
-    let peerConnection: RTCPeerConnection | null = null;
-    let pendingCandidates: RTCIceCandidateInit[] = [];
-
-    const setupPeerConnection = () => {
-      peerConnection = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-
-      peerConnection.ontrack = (event) => {
-        const stream = event.streams[0];
-        if (stream && stream.getAudioTracks().length > 0) {
-            audioEngine.routeStreamToChannel(stream, 'ch-1', 'webrtc-stream');
-            audioEngine.routeStreamToChannel(stream, 'ch-2', 'webrtc-stream-2'); // Pipe to both ch-1 and ch-2 as requested
-            setChannels(prev => prev.map(ch => ch.id === 'ch-1' || ch.id === 'ch-2' ? { ...ch, name: 'TAB AUDIO' } : ch));
-        }
-      };
-
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          chrome.runtime.sendMessage({
-            type: 'WEBRTC_ICE_CANDIDATE',
-            candidate: event.candidate,
-            target: 'offscreen'
-          });
-        }
-      };
-
-      return peerConnection;
-    };
-
-    const handleMessage = async (message: any) => {
-      if (message.type === 'OFFSCREEN_READY') {
-        const pc = setupPeerConnection();
-        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-        await pc.setLocalDescription(offer);
-
-        chrome.runtime.sendMessage({
-          type: 'WEBRTC_OFFER',
-          offer: offer,
-          target: 'offscreen'
-        });
-      } else if (message.type === 'WEBRTC_ANSWER' && message.target === 'app') {
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
-          for (const candidate of pendingCandidates) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-          }
-          pendingCandidates = [];
-        }
-      } else if (message.type === 'WEBRTC_ICE_CANDIDATE' && message.target === 'app') {
-        if (peerConnection) {
-          if (peerConnection.remoteDescription) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
-          } else {
-            pendingCandidates.push(message.candidate);
-          }
-        }
-      }
-    };
-
-    if (window.chrome && chrome.runtime && chrome.runtime.onMessage) {
-        chrome.runtime.onMessage.addListener(handleMessage);
-    }
-
-    return () => {
-      if (window.chrome && chrome.runtime && chrome.runtime.onMessage) {
-        chrome.runtime.onMessage.removeListener(handleMessage);
-      }
-      if (peerConnection) {
-        peerConnection.close();
-      }
-    };
-  }, []);
   const recognitionRef = useRef<any>(null);
 
   const handleTranscribe = () => {
@@ -1133,10 +1057,24 @@ export default function App() {
 
   const handleRouteExternalTab = async () => {
     try {
-      if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ type: 'CAPTURE_TAB_REQUEST' });
-      } else {
-        console.warn("Chrome extension APIs not available");
+      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) videoTrack.stop(); // We only want audio
+      
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioEngine.routeStreamToChannel(stream, 'ch-1');
+        // Update transcription to show something happened
+        setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
     } catch (err) {
       console.error('Routing failed:', err);
