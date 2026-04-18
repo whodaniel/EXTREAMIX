@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0c1324;
+  --color-surface: #0c1324;
+  --color-surface-dim: #0c1324;
+  --color-surface-bright: #33394c;
+  --color-surface-container-lowest: #070d1f;
+  --color-surface-container-low: #151b2d;
+  --color-surface-container: #191f31;
+  --color-surface-container-high: #23293c;
+  --color-surface-container-highest: #2e3447;
+  
+  --color-primary: #8ed5ff;
+  --color-primary-container: #38bdf8;
+  --color-on-primary-container: #004965;
+  
+  --color-secondary: #c0c1ff;
+  --color-secondary-container: #3131c0;
+  
+  --color-tertiary: #56e5a9;
+  --color-tertiary-container: #30c88f;
+  
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  
+  --color-outline: #87929a;
+  --color-outline-variant: #3e484f;
+  
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-body: "Manrope", sans-serif;
+  --font-label: "Space Grotesk", sans-serif;
+  
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+  @apply antialiased overflow-hidden selection:bg-primary-container selection:text-on-primary-container;
+}
+
+.glass-panel {
+  background: rgba(46, 52, 71, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glow-primary {
+  box-shadow: 0 0 40px rgba(142, 213, 255, 0.08);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.2);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.4);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
