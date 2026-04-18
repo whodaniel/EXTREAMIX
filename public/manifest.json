@@ -7,7 +7,8 @@
     "tabCapture",
     "activeTab",
     "storage",
-    "displayCapture"
+    "displayCapture",
+    "offscreen"
   ],
   "action": {
     "default_title": "Open EXTREAMIX"
