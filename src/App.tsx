@@ -1154,7 +1154,7 @@ export default function App() {
       <header className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between bg-surface/80 backdrop-blur-xl border-b border-white/5 z-50">
         <div className="flex items-center gap-4 md:gap-12">
           <div className="flex flex-col">
-            <h1 className="text-lg md:text-2xl font-black text-primary italic font-headline tracking-tighter glow-text leading-none">EXTREAMIX</h1>
+            <h1 className="text-lg md:text-2xl font-black text-primary italic font-headline tracking-tighter glow-text leading-none"><img src="/extreamix-logo.svg" alt="EXTREAMIX Logo" className="h-10 w-auto md:h-12" /></h1>
             <div className="flex items-center gap-2 mt-1 hidden sm:flex">
               <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
               <span className="font-headline text-[7px] text-outline tracking-[0.2em] font-black uppercase">CORE_ENGINE_v4 // STATUS_NOMINAL</span>
