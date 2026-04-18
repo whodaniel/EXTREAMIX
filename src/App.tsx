@@ -1151,25 +1151,70 @@ export default function App() {
 
   const handleRouteExternalTab = async () => {
     try {
-      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+        // Extension Environment: Use chrome.tabCapture via WebRTC signaling
+        let peerConnection: RTCPeerConnection | null = null;
+
+        const messageListener = async (message: any) => {
+          if (message.type === 'OFFSCREEN_STREAM_READY') {
+            peerConnection = new RTCPeerConnection({
+              iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            peerConnection.ontrack = (event) => {
+              const stream = event.streams[0];
+              if (stream && stream.getAudioTracks().length > 0) {
+                 audioEngine.routeStreamToChannel(stream, 'ch-1');
+                 audioEngine.routeStreamToChannel(stream, 'ch-2');
+                 setChannels(prev => prev.map(ch =>
+                   (ch.id === 'ch-1' || ch.id === 'ch-2') ? { ...ch, name: 'EXTERNAL TAB AUDIO' } : ch
+                 ));
+              }
+            };
+
+            peerConnection.onicecandidate = (event) => {
+              if (event.candidate) {
+                 chrome.runtime.sendMessage({
+                   type: 'WEBRTC_ICE_CANDIDATE',
+                   candidate: event.candidate,
+                   source: 'main'
+                 });
+              }
+            };
+
+            const offer = await peerConnection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+            await peerConnection.setLocalDescription(offer);
+            chrome.runtime.sendMessage({ type: 'WEBRTC_OFFER', offer: offer });
+
+          } else if (message.type === 'WEBRTC_ANSWER' && peerConnection) {
+             await peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
+          } else if (message.type === 'WEBRTC_ICE_CANDIDATE' && message.source === 'offscreen' && peerConnection) {
+             await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+          }
+        };
+
+        chrome.runtime.onMessage.addListener(messageListener);
+        chrome.runtime.sendMessage({ type: 'INIT_TAB_CAPTURE' });
+
+      } else {
+        // Web Environment: Fallback to getDisplayMedia
+        // @ts-ignore
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) videoTrack.stop();
+
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+          audioEngine.routeStreamToChannel(stream, 'ch-1');
+          audioEngine.routeStreamToChannel(stream, 'ch-2');
+          setChannels(prev => prev.map(ch => (ch.id === 'ch-1' || ch.id === 'ch-2') ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
         }
-      });
-      
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) videoTrack.stop(); // We only want audio
-      
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioEngine.routeStreamToChannel(stream, 'ch-1');
-        // Update transcription to show something happened
-        setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
+
     } catch (err) {
       console.error('Routing failed:', err);
     }
