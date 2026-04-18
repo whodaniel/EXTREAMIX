@@ -30,14 +30,12 @@ import {
   Zap,
   ExternalLink,
   Maximize2,
-  Tv,
-  Cloud
+  Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource } from './types';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
-import { Registry } from './services/registry';
 
 // --- Shared Components ---
 
@@ -436,10 +434,6 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-
-    // Cache the gradient outside the animation loop
-    let gradient: CanvasGradient | null = null;
-
     let animationId: number;
     const draw = () => {
       const analyser = audioEngine.getMasterAnalyser();
@@ -452,36 +446,17 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
       const dataArray = new Uint8Array(bufferLength);
       analyser.getByteFrequencyData(dataArray);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#070d1f';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      if (!gradient) {
-        gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, '#004965');
-        gradient.addColorStop(0.5, '#38bdf8');
-        gradient.addColorStop(0.8, '#56e5a9');
-        gradient.addColorStop(1, '#ffb4ab');
-      }
-
-      const barWidth = (canvas.width / bufferLength) * 2.5;
+      const barWidth = (canvas.width / bufferLength) * 2;
       let x = 0;
-
-      // Set styles once outside the loop
-      ctx.fillStyle = gradient;
-      // Use a fixed color for the shadow to avoid passing a gradient object
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 15;
 
       for (let i = 0; i < bufferLength; i++) {
         const barHeight = (dataArray[i] / 255) * canvas.height;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
-        x += barWidth;
-      }
-
-      // Reset styles for scanlines
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-      ctx.shadowBlur = 0;
-      for (let i = 0; i < canvas.height; i += 4) {
-        ctx.fillRect(0, i, canvas.width, 1);
+        ctx.fillStyle = i % 10 === 0 ? '#56e5a9' : '#38bdf8';
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
       }
 
       animationId = requestAnimationFrame(draw);
@@ -999,12 +974,6 @@ const ProjectorView = () => {
 export default function App() {
   const isProjector = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('projector') === 'true';
   const [currentView, setCurrentView] = useState<View>('mixer');
-  const [sequencer, setSequencer] = useState<SequencerState>({
-    steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true],
-    bpm: 120,
-    currentStep: -1,
-    isPlaying: false
-  });
   const [channels, setChannels] = useState<ChannelState[]>([
     { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
     { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
@@ -1014,74 +983,6 @@ export default function App() {
   const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const [isCloudMode, setIsCloudMode] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(false);
-
-
-  useEffect(() => {
-    const loadSavedState = async () => {
-      const savedChannels = await Registry.loadState('extreamix_channels');
-      if (savedChannels) {
-        setChannels(savedChannels);
-      }
-      const savedSequencer = await Registry.loadState('extreamix_sequencer');
-      if (savedSequencer) {
-        setSequencer(savedSequencer);
-      }
-      setHasLoaded(true);
-    };
-    loadSavedState();
-  }, []);
-
-
-  useEffect(() => {
-    if (hasLoaded) Registry.saveState('extreamix_channels', channels);
-  }, [channels, hasLoaded]);
-
-
-  useEffect(() => {
-    if (hasLoaded) Registry.saveState('extreamix_sequencer', sequencer);
-  }, [sequencer, hasLoaded]);
-
-
-  useEffect(() => {
-    if (isCloudMode) {
-      // Connect to a hypothetical WebSocket endpoint for broadcasting
-      const wsUrl = Registry.getEnvironment() === 'saas'
-        ? 'wss://api.extreamix.com/broadcast'
-        : 'ws://localhost:8080/broadcast'; // Or fallback
-
-      try {
-        wsRef.current = new WebSocket(wsUrl);
-        wsRef.current.onopen = () => {
-          console.log('Cloud Mode: Connected to broadcast server');
-          wsRef.current?.send(JSON.stringify({ type: 'state_update', payload: { channels, sequencer } }));
-        };
-        wsRef.current.onerror = (err) => console.error('Cloud Mode WS Error:', err);
-      } catch (e) {
-        console.error('Cloud Mode: Failed to connect WS', e);
-      }
-    } else {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    }
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [isCloudMode]);
-
-  useEffect(() => {
-    if (isCloudMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'state_update', payload: { channels, sequencer } }));
-    }
-  }, [channels, sequencer, isCloudMode]);
 
   const handleTranscribe = () => {
     // @ts-ignore
@@ -1137,7 +1038,12 @@ export default function App() {
     }
   };
 
-
+  const [sequencer, setSequencer] = useState<SequencerState>({
+    steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true],
+    bpm: 120,
+    currentStep: -1,
+    isPlaying: false
+  });
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
 
   useEffect(() => {
@@ -1151,70 +1057,25 @@ export default function App() {
 
   const handleRouteExternalTab = async () => {
     try {
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-        // Extension Environment: Use chrome.tabCapture via WebRTC signaling
-        let peerConnection: RTCPeerConnection | null = null;
-
-        const messageListener = async (message: any) => {
-          if (message.type === 'OFFSCREEN_STREAM_READY') {
-            peerConnection = new RTCPeerConnection({
-              iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-            });
-
-            peerConnection.ontrack = (event) => {
-              const stream = event.streams[0];
-              if (stream && stream.getAudioTracks().length > 0) {
-                 audioEngine.routeStreamToChannel(stream, 'ch-1');
-                 audioEngine.routeStreamToChannel(stream, 'ch-2');
-                 setChannels(prev => prev.map(ch =>
-                   (ch.id === 'ch-1' || ch.id === 'ch-2') ? { ...ch, name: 'EXTERNAL TAB AUDIO' } : ch
-                 ));
-              }
-            };
-
-            peerConnection.onicecandidate = (event) => {
-              if (event.candidate) {
-                 chrome.runtime.sendMessage({
-                   type: 'WEBRTC_ICE_CANDIDATE',
-                   candidate: event.candidate,
-                   source: 'main'
-                 });
-              }
-            };
-
-            const offer = await peerConnection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-            await peerConnection.setLocalDescription(offer);
-            chrome.runtime.sendMessage({ type: 'WEBRTC_OFFER', offer: offer });
-
-          } else if (message.type === 'WEBRTC_ANSWER' && peerConnection) {
-             await peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
-          } else if (message.type === 'WEBRTC_ICE_CANDIDATE' && message.source === 'offscreen' && peerConnection) {
-             await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
-          }
-        };
-
-        chrome.runtime.onMessage.addListener(messageListener);
-        chrome.runtime.sendMessage({ type: 'INIT_TAB_CAPTURE' });
-
-      } else {
-        // Web Environment: Fallback to getDisplayMedia
-        // @ts-ignore
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-        });
-
-        const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack) videoTrack.stop();
-
-        const audioTrack = stream.getAudioTracks()[0];
-        if (audioTrack) {
-          audioEngine.routeStreamToChannel(stream, 'ch-1');
-          audioEngine.routeStreamToChannel(stream, 'ch-2');
-          setChannels(prev => prev.map(ch => (ch.id === 'ch-1' || ch.id === 'ch-2') ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
+      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
         }
+      });
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) videoTrack.stop(); // We only want audio
+      
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioEngine.routeStreamToChannel(stream, 'ch-1');
+        // Update transcription to show something happened
+        setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
-
     } catch (err) {
       console.error('Routing failed:', err);
     }
@@ -1343,20 +1204,10 @@ export default function App() {
             </div>
           </div>
 
-
           <div className="hidden sm:flex items-center gap-2">
-            <button
-              onClick={() => setIsCloudMode(!isCloudMode)}
-              aria-label="Toggle Cloud Mode"
-              className={`p-2 rounded-lg transition-all ${isCloudMode ? 'bg-primary/20 text-primary shadow-[0_0_10px_#38bdf8]' : 'bg-white/5 text-outline hover:text-white border border-white/5'}`}
-              title={`Cloud Mode ${isCloudMode ? 'ON' : 'OFF'} (${Registry.getEnvironment()})`}
-            >
-              <Cloud className="w-4 h-4" />
-            </button>
             <button 
               onClick={handleRouteExternalTab}
               aria-label="Route External Tab"
-
               className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white p-2 md:px-4 md:py-2 rounded-lg font-bold text-xs shadow-lg transition-all flex items-center gap-2"
             >
               <Monitor className="w-4 h-4" />
@@ -1440,9 +1291,9 @@ export default function App() {
           }`}>
              {sequencer.isPlaying ? <Square className="w-4 h-4 md:w-5 md:h-5 fill-current" aria-hidden="true" /> : <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5" aria-hidden="true" />}
           </button>
-          <div className="hidden sm:block industrial-futurism crt-scanlines p-2 rounded relative">
-            <div className="font-headline text-[10px] md:text-sm font-bold text-primary truncate max-w-[120px] md:max-w-[200px] telemetry-overlay">LIVE_STREAM_BUFFER</div>
-            <div className="font-headline text-[8px] md:text-[10px] text-outline uppercase tracking-widest relative z-10">Master Feed • 48kHz / 24bit</div>
+          <div className="hidden sm:block">
+            <div className="font-headline text-[10px] md:text-sm font-bold text-primary truncate max-w-[120px] md:max-w-[200px]">LIVE_STREAM_BUFFER</div>
+            <div className="font-headline text-[8px] md:text-[10px] text-outline uppercase tracking-widest">Master Feed • 48kHz / 24bit</div>
           </div>
         </div>
 
