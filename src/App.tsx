@@ -35,6 +35,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset } from './types';
 import { audioEngine } from './services/audioEngine';
+import { midiService } from './services/MidiService';
 import { videoEngine } from './services/videoEngine';
 
 // --- Shared Components ---
@@ -921,9 +922,13 @@ const MatrixCanvas = ({
 };
 
 const MatrixView = ({
-  mappings
+  mappings,
+  onLearn,
+  learningId
 }: {
-  mappings: MatrixMapping[]
+  mappings: MatrixMapping[];
+  onLearn: (id: string) => void;
+  learningId: string | null;
 }) => {
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem]">
@@ -961,11 +966,18 @@ const MatrixView = ({
                             <div className="font-mono text-[9px] text-outline mt-1">CC_WAITING...</div>
                          </div>
                       </div>
-                      <div className="flex flex-col items-end">
-                         <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
-                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner">
-                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                      <div className="flex flex-col items-end gap-1">
+                         <div className="flex gap-2 items-center">
+                           <button onClick={() => onLearn(m.id)} className={`text-[8px] px-2 py-1 rounded border font-headline tracking-widest transition-all ${learningId === m.id ? 'bg-primary text-black border-primary animate-pulse' : 'border-white/20 text-outline hover:text-white'}`}>LEARN</button>
+                           <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
                          </div>
+                         {learningId === m.id ? (
+                           <div className="font-mono text-xs text-primary animate-pulse">[AWAITING_MIDI_SIGNAL]</div>
+                         ) : (
+                           <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner">
+                             {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                           </div>
+                         )}
                       </div>
                    </div>
                  ))}
@@ -990,11 +1002,18 @@ const MatrixView = ({
                             <div className="font-mono text-[9px] text-outline mt-1">VAL: {m.value.toFixed(2)}</div>
                          </div>
                       </div>
-                      <div className="flex flex-col items-end">
-                         <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
-                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner">
-                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                      <div className="flex flex-col items-end gap-1">
+                         <div className="flex gap-2 items-center">
+                           <button onClick={() => onLearn(m.id)} className={`text-[8px] px-2 py-1 rounded border font-headline tracking-widest transition-all ${learningId === m.id ? 'bg-tertiary text-black border-tertiary animate-pulse' : 'border-white/20 text-outline hover:text-white'}`}>LEARN</button>
+                           <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
                          </div>
+                         {learningId === m.id ? (
+                           <div className="font-mono text-xs text-tertiary animate-pulse">[AWAITING_MIDI_SIGNAL]</div>
+                         ) : (
+                           <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner">
+                             {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                           </div>
+                         )}
                       </div>
                    </div>
                  ))}
@@ -1247,9 +1266,21 @@ export default function App() {
 
   // Master Limiter state for LED feedback in Console
   const [masterLimiterActive, setMasterLimiterActive] = useState(false);
+  const [learningId, setLearningId] = useState<string | null>(null);
 
 
   useEffect(() => {
+    // Initialize MIDI Service mappings
+    midiService.init().then(() => {
+      const savedMappings = midiService.getAllMappings();
+      setMatrixMappings(prev => prev.map(m => {
+        if (savedMappings[m.id] !== undefined) {
+          return { ...m, midiCC: savedMappings[m.id] };
+        }
+        return m;
+      }));
+    });
+
     audioEngine.init();
     channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
     
@@ -1265,6 +1296,17 @@ export default function App() {
 
   const toggleCrossoverGate = (gate: keyof typeof crossoverGates) => {
     setCrossoverGates(prev => ({ ...prev, [gate]: !prev[gate] }));
+  };
+
+
+  const handleLearnMapping = async (id: string) => {
+    setLearningId(id);
+    const learnedCC = await midiService.engageLearnMode(id);
+    if (learnedCC !== null) {
+      setMatrixMappings(prev => prev.map(m => m.id === id ? { ...m, midiCC: learnedCC } : m));
+      midiService.saveMapping(id, learnedCC);
+    }
+    setLearningId(null);
   };
 
   const loadPreset = (presetId: string) => {
@@ -1528,6 +1570,8 @@ export default function App() {
               {currentView === 'routing' && (
                 <MatrixView 
                   mappings={matrixMappings} 
+                  onLearn={handleLearnMapping}
+                  learningId={learningId}
                 />
               )}
               {currentView === 'library' && (
