@@ -1,10 +1,9 @@
 import { ChannelState } from '../types';
 
-class ExtreamixEngine {
+class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
-  private crossoverInput: GainNode | null = null;
   private channels: Map<string, { 
     gain: GainNode; 
     panner: PannerNode; 
@@ -35,41 +34,8 @@ class ExtreamixEngine {
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
     
-    this.crossoverInput = this.ctx.createGain();
-
-    // Crossover Matrix Implementation
-    // Node A
-    const nodeA = this.ctx.createBiquadFilter();
-    nodeA.type = 'lowpass';
-    nodeA.frequency.value = 200;
-    const gateA = this.ctx.createGain();
-    gateA.gain.value = 0;
-    this.crossoverInput.connect(nodeA);
-    nodeA.connect(gateA);
-    gateA.connect(this.masterGain);
-
-    // Node B
-    const nodeB = this.ctx.createBiquadFilter();
-    nodeB.type = 'bandpass';
-    nodeB.frequency.value = 1000;
-    const gateB = this.ctx.createGain();
-    gateB.gain.value = 0;
-    this.crossoverInput.connect(nodeB);
-    nodeB.connect(gateB);
-    gateB.connect(this.masterGain);
-
-    // Node C
-    const nodeC = this.ctx.createBiquadFilter();
-    nodeC.type = 'highpass';
-    nodeC.frequency.value = 3000;
-    const gateC = this.ctx.createGain();
-    gateC.gain.value = 0;
-    this.crossoverInput.connect(nodeC);
-    nodeC.connect(gateC);
-    gateC.connect(this.masterGain);
-
     this.masterGain.connect(this.masterAnalyser);
-    this.masterGain.connect(this.ctx.destination);
+    this.masterAnalyser.connect(this.ctx.destination);
   }
 
   public getContext() {
@@ -123,7 +89,7 @@ class ExtreamixEngine {
     eqHigh.connect(gain);
     gain.connect(panner);
     panner.connect(analyser);
-    analyser.connect(this.crossoverInput || this.masterGain);
+    analyser.connect(this.masterGain);
     
     this.channels.set(id, { gain, panner, analyser, eqLow, eqMid, eqHigh });
   }
@@ -253,5 +219,4 @@ class ExtreamixEngine {
   }
 }
 
-export const ExtreamixEngineInstance = new ExtreamixEngine();
-export { ExtreamixEngineInstance as ExtreamixEngine };
+export const audioEngine = new AudioEngine();

@@ -46,6 +46,42 @@ export interface RoutingSource {
   id: string;
   name: string;
   active: boolean;
-  inputBus: string;
-  virtualOut: string;
+  type: 'tab' | 'mic' | 'system' | 'generator';
+}
+
+export interface RoutingDestination {
+  id: string;
+  name: string;
+}
+
+export interface RoutingConnection {
+  sourceId: string;
+  destinationId: string;
+}
+
+export interface CrossoverState {
+  low200: boolean;
+  mid1000: boolean;
+  high3000: boolean;
+}
+
+export interface ShaderUniforms {
+  rgbSplit: number;
+  pixelation: number;
+}
+
+export interface MatrixMapping {
+  id: string;
+  target: string; // e.g., 'GATE_LOW', 'SHADER_RGB'
+  midiCC: number | null;
+  value: number; // 0-127 or 0-1
+}
+
+export interface RegistryPreset {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  lastModified: string;
+  patchData: string; // JSON string
 }
