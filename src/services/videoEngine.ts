@@ -5,6 +5,8 @@ class VideoEngine {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private animationId: number | null = null;
+  private uniforms: any = {};
+
 
   public init(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -100,6 +102,12 @@ class VideoEngine {
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
     }
+  }
+
+  public updateUniforms(uniforms: any) {
+    this.uniforms = { ...this.uniforms, ...uniforms };
+    // In a real implementation this would pass to the webgl shaders
+    console.log('Updated video engine uniforms:', this.uniforms);
   }
 }
 

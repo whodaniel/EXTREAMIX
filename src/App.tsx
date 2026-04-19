@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource } from './types';
-import { audioEngine } from './services/audioEngine';
+import { extreamixEngine } from './services/ExtreamixEngine';
 import { videoEngine } from './services/videoEngine';
 
 // --- Shared Components ---
@@ -132,7 +132,7 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
       'VisionProjector', 
       `width=${width},height=${height},left=${left},top=${top},menubar=no,status=no,location=no`
     );
-  };
+};
 
   const handleFullscreen = () => {
     if (canvasRef.current) {
@@ -436,7 +436,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
 
     let animationId: number;
     const draw = () => {
-      const analyser = audioEngine.getMasterAnalyser();
+      const analyser = extreamixEngine.getMasterAnalyser();
       if (!analyser) {
         animationId = requestAnimationFrame(draw);
         return;
@@ -499,7 +499,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
                 <div className="flex bg-surface-container-lowest/50 rounded-xl p-2 items-stretch gap-2">
                    {/* Channel VU Meter */}
                    <VUMeter 
-                    analyser={audioEngine.getChannelAnalyser(channel.id)} 
+                    analyser={extreamixEngine.getChannelAnalyser(channel.id)}
                     orientation="vertical" 
                     className="w-1.5 h-full opacity-80" 
                    />
@@ -640,7 +640,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
             <div className="flex items-center gap-4">
                {/* Master Output VU Meter */}
                <div className="flex flex-col items-end gap-1">
-                 <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
+                 <VUMeter analyser={extreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
                  <span className="font-mono text-[7px] text-outline/50 uppercase">MASTER_PEAK</span>
                </div>
                <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" aria-hidden="true" />
@@ -852,12 +852,36 @@ const RoutingView = () => {
 };
 
 const LibraryView = () => {
+  const [activePresetIndex, setActivePresetIndex] = useState(0);
+
   const presets = [
-    { title: "Deep Space Lead", author: "Architect", tags: ["120 BPM", "POLY SYNTH"], active: true },
-    { title: "Neon Kick", author: "VoidDrums", tags: ["ONE SHOT", "DRUM"], active: false },
-    { title: "Ethereal Pad", author: "CloudWalker", tags: ["AMBIENT", "TEXTURE"], active: false },
+    {
+      title: "Deep Space Lead",
+      author: "Architect",
+      tags: ["120 BPM", "POLY SYNTH"],
+      patch: { filters: { low: 5.0, mid: -2.0, high: 8.0 }, uniforms: { glow: 0.8, distortion: 0.2 } }
+    },
+    {
+      title: "Neon Kick",
+      author: "VoidDrums",
+      tags: ["ONE SHOT", "DRUM"],
+      patch: { filters: { low: 12.0, mid: 0.0, high: -5.0 }, uniforms: { glow: 0.1, distortion: 0.9 } }
+    },
+    {
+      title: "Ethereal Pad",
+      author: "CloudWalker",
+      tags: ["AMBIENT", "TEXTURE"],
+      patch: { filters: { low: -4.0, mid: 4.0, high: 6.0 }, uniforms: { glow: 1.2, distortion: 0.05 } }
+    },
   ];
 
+  const handleAddToSession = () => {
+    const preset = presets[activePresetIndex];
+    if (preset && preset.patch) {
+      extreamixEngine.applyPatch(preset.patch);
+      console.log(`Applied patch: ${preset.title}`);
+    }
+  };
   return (
     <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 bg-surface">
       <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar">
@@ -883,32 +907,33 @@ const LibraryView = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6">
-          {presets.map(p => (
+          {presets.map((p, index) => (
             <button 
               key={p.title} 
-              aria-label={`Preset: ${p.title} by ${p.author}. ${p.active ? 'Current selection' : 'Click to select'}`}
-              className={`p-5 md:p-6 rounded-3xl transition-all duration-300 relative overflow-hidden group text-left focus:outline-none focus:ring-2 focus:ring-primary/50 ${
-                p.active ? 'bg-surface-container-high border-t border-primary/20 shadow-2xl scale-[1.02]' : 'bg-surface-container-low border border-white/5 hover:bg-surface-container-high hover:scale-[1.01]'
+              aria-label={`Preset: ${p.title} by ${p.author}. ${index === activePresetIndex ? 'Current selection' : 'Click to select'}`}
+              onClick={() => setActivePresetIndex(index)}
+              className={`p-5 md:p-6 rounded-3xl transition-all duration-300 relative overflow-hidden group text-left focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer ${
+                index === activePresetIndex ? 'bg-surface-container-high border-t border-primary/20 shadow-2xl scale-[1.02]' : 'bg-surface-container-low border border-white/5 hover:bg-surface-container-high hover:scale-[1.01]'
               }`}
             >
               <div className="flex justify-between items-start mb-4 md:mb-6">
                  <div>
-                   <h3 className={`font-headline text-base md:text-lg font-black mb-1 leading-none ${p.active ? 'text-primary glow-text' : 'text-white group-hover:text-primary transition-colors'}`}>{p.title}</h3>
+                   <h3 className={`font-headline text-base md:text-lg font-black mb-1 leading-none ${index === activePresetIndex ? 'text-primary glow-text' : 'text-white group-hover:text-primary transition-colors'}`}>{p.title}</h3>
                    <p className="text-[9px] text-outline font-headline uppercase tracking-tighter">by {p.author}</p>
                  </div>
-                 {p.active && <Plus className="w-4 h-4 text-tertiary" aria-hidden="true" />}
+                 {index === activePresetIndex && <Plus className="w-4 h-4 text-tertiary" aria-hidden="true" />}
               </div>
               <div className="h-16 w-full bg-black/40 rounded-xl mb-6 flex items-end justify-center gap-1.5 overflow-hidden p-2 shadow-inner">
                  {[1,2,3,4,5,6,7,8,9,10].map(i => (
                     <motion.div 
                       key={i}
-                      animate={{ height: p.active ? [20, 48, 24, 56, 30] : 8 }}
+                      animate={{ height: index === activePresetIndex ? [20, 48, 24, 56, 30] : 8 }}
                       transition={{ 
                         repeat: Infinity, 
-                        duration: p.active ? (0.8 + i * 0.1) : 2,
+                        duration: index === activePresetIndex ? (0.8 + i * 0.1) : 2,
                         delay: i * 0.05
                       }}
-                      className={`w-1 rounded-full ${p.active ? 'bg-primary shadow-[0_0_10px_#38bdf8]' : 'bg-outline/10'}`} 
+                      className={`w-1 rounded-full ${index === activePresetIndex ? 'bg-primary shadow-[0_0_10px_#38bdf8]' : 'bg-outline/10'}`}
                     />
                  ))}
               </div>
@@ -942,7 +967,7 @@ const LibraryView = () => {
             </div>
          </div>
 
-         <button className="mt-auto bg-primary hover:bg-white text-on-primary-container py-4 md:py-5 rounded-2xl font-headline font-black text-xs tracking-widest shadow-2xl active:scale-[0.98] transition-all uppercase flex items-center justify-center gap-3">
+         <button onClick={handleAddToSession} className="mt-auto bg-primary hover:bg-white text-on-primary-container py-4 md:py-5 rounded-2xl font-headline font-black text-xs tracking-widest shadow-2xl active:scale-[0.98] transition-all uppercase flex items-center justify-center gap-3">
             <Plus className="w-4 h-4" />
             ADD_TO_SESSION
          </button>
@@ -1047,10 +1072,10 @@ export default function App() {
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
 
   useEffect(() => {
-    audioEngine.init();
-    channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+    extreamixEngine.init();
+    channels.forEach(ch => extreamixEngine.createChannel(ch.id, ch));
     
-    audioEngine.onStep = (step) => {
+    extreamixEngine.onStep = (step) => {
       setSequencer(prev => ({ ...prev, currentStep: step }));
     };
   }, []);
@@ -1072,7 +1097,7 @@ export default function App() {
       
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
-        audioEngine.routeStreamToChannel(stream, 'ch-1');
+        extreamixEngine.routeStreamToChannel(stream, 'ch-1');
         // Update transcription to show something happened
         setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
@@ -1083,10 +1108,10 @@ export default function App() {
 
   const handlePlay = () => {
     if (sequencer.isPlaying) {
-      audioEngine.stopSequencer();
+      extreamixEngine.stopSequencer();
       setSequencer(prev => ({ ...prev, isPlaying: false, currentStep: -1 }));
     } else {
-      audioEngine.startSequencer(sequencer.bpm, sequencer.steps);
+      extreamixEngine.startSequencer(sequencer.bpm, sequencer.steps);
       setSequencer(prev => ({ ...prev, isPlaying: true }));
     }
   };
@@ -1106,7 +1131,7 @@ export default function App() {
       
       // If audio exists, route it too
       if (source.audioChannelId) {
-        audioEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
+        extreamixEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
       }
     } catch (err) {
       console.error('Failed to add video source:', err);
@@ -1119,7 +1144,7 @@ export default function App() {
 
     if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
       if (update.audioChannelId) {
-        audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
+        extreamixEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
       }
     }
 
@@ -1131,7 +1156,7 @@ export default function App() {
     setChannels(prev => prev.map(ch => {
       if (ch.id === id) {
         const next = { ...ch, ...update };
-        audioEngine.updateChannel(id, next);
+        extreamixEngine.updateChannel(id, next);
         return next;
       }
       return ch;
@@ -1299,7 +1324,7 @@ export default function App() {
 
         <div className="flex items-center gap-6 md:gap-12">
            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5">
-              <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
+              <VUMeter analyser={extreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
            </div>
            
            <div className="flex items-center gap-2">

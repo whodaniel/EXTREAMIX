@@ -1,6 +1,6 @@
 import { ChannelState } from '../types';
 
-class AudioEngine {
+class ExtreamixEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
@@ -217,6 +217,30 @@ class AudioEngine {
     this.nextNoteTime += 0.25 * secondsPerBeat;
     this.current16thNote = (this.current16thNote + 1) % 16;
   }
+
+  public applyPatch(patch: any) {
+    if (!this.ctx) return;
+
+    if (patch.filters) {
+      this.channels.forEach((channel) => {
+        if (patch.filters.low !== undefined) {
+          channel.eqLow.gain.setTargetAtTime(patch.filters.low, this.ctx!.currentTime, 0.02);
+        }
+        if (patch.filters.mid !== undefined) {
+          channel.eqMid.gain.setTargetAtTime(patch.filters.mid, this.ctx!.currentTime, 0.02);
+        }
+        if (patch.filters.high !== undefined) {
+          channel.eqHigh.gain.setTargetAtTime(patch.filters.high, this.ctx!.currentTime, 0.02);
+        }
+      });
+    }
+
+    if (patch.uniforms) {
+      import('./videoEngine').then(({ videoEngine }) => {
+        videoEngine.updateUniforms(patch.uniforms);
+      });
+    }
+  }
 }
 
-export const audioEngine = new AudioEngine();
+export const extreamixEngine = new ExtreamixEngine();
