@@ -4,6 +4,7 @@ class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
+  private streamDestination: MediaStreamAudioDestinationNode | null = null;
   private channels: Map<string, { 
     gain: GainNode; 
     panner: PannerNode; 
@@ -36,10 +37,18 @@ class AudioEngine {
     
     this.masterGain.connect(this.masterAnalyser);
     this.masterAnalyser.connect(this.ctx.destination);
+
+    this.streamDestination = this.ctx.createMediaStreamDestination();
+    this.masterAnalyser.connect(this.streamDestination);
   }
 
   public getContext() {
     return this.ctx;
+  }
+
+
+  public getAudioStream(): MediaStream | null {
+    return this.streamDestination ? this.streamDestination.stream : null;
   }
 
   public getMasterAnalyser() {

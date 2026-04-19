@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset } from './types';
+import { useCaptureRig } from './hooks/useCaptureRig';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 
@@ -440,6 +441,7 @@ const ConsoleView = ({
   crossoverGates: CrossoverState,
   toggleCrossoverGate: (gate: keyof CrossoverState) => void
 }) => {
+  const { isRecording, startRecording, stopRecording } = useCaptureRig();
   const mixerCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -670,7 +672,14 @@ const ConsoleView = ({
                
                {/* Master Output VU Meter */}
                <div className="flex flex-col items-end gap-1">
-                 <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
+
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`text-[8px] md:text-[10px] font-bold px-2 py-0.5 rounded transition-colors border ${isRecording ? 'bg-red-500/20 text-red-400 border-red-500/50 animate-pulse' : 'bg-white/5 text-outline border-white/10 hover:bg-white/10'}`}
+              >
+                {isRecording ? 'REC_ACTIVE' : 'REC_START'}
+              </button>
+              <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
                  <span className="font-mono text-[7px] text-outline/50 uppercase">MASTER_PEAK</span>
                </div>
             </div>
