@@ -33,9 +33,10 @@ import {
   Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { View, ChannelState, SequencerState, RoutingSource, VideoSource } from './types';
-import { ExtreamixEngine } from './services/ExtreamixEngine';
+import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset } from './types';
+import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
+import { LandingPage } from './components/LandingPage';
 
 // --- Shared Components ---
 
@@ -96,7 +97,7 @@ const NavItem = ({
 
 // --- Sub-Views ---
 
-const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSource[], onUpdate: (id: string, update: Partial<VideoSource>) => void, onAdd: () => void, channels: ChannelState[] }) => {
+const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSource[], onUpdate: (id: string, update: Partial<VideoSource>) => void, onAdd: () => void, channels: ChannelState[] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
 
@@ -129,7 +130,7 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
     
     window.open(
       `${window.location.origin}/?projector=true`, 
-      'VisionProjector', 
+      'ImagingProjector', 
       `width=${width},height=${height},left=${left},top=${top},menubar=no,status=no,location=no`
     );
   };
@@ -146,21 +147,21 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
     <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto xl:overflow-hidden min-h-0 p-2 md:p-4 custom-scrollbar lg:pb-20 xl:pb-0">
       {/* Main Canvas Monitor */}
       <div 
-        className="flex-[3] min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
+        className="flex-[3] min-h-[300px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
       >
         <canvas 
           ref={canvasRef} 
           className="w-full h-full object-contain" 
           width={1920} height={1080} 
           role="img" 
-          aria-label="Vision Mixer Master Output Monitor"
+          aria-label="Imaging Module WebGL Canvas"
         />
         <div className="absolute top-4 left-4 md:top-6 md:left-6 flex flex-col gap-1 pointer-events-none">
-          <div className="font-headline text-[9px] md:text-[10px] text-primary bg-black/60 px-3 py-1 rounded-full border border-primary/20 tracking-widest uppercase backdrop-blur-md">
-            MASTER_VISION_OUT
+          <div className="font-headline text-[9px] md:text-[10px] text-tertiary bg-black/60 px-3 py-1 rounded-full border border-tertiary/20 tracking-widest uppercase backdrop-blur-md">
+            IMAGING_OUT // WEBGL2
           </div>
           <div className="font-headline text-[8px] text-outline px-3 tracking-widest uppercase hidden sm:block">
-            30FPS | PRORES_RAW_SIM
+            HARDWARE_ACCELERATED
           </div>
         </div>
         
@@ -168,9 +169,9 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
            <button onClick={handleFullscreen} className="bg-white/10 hover:bg-white/20 text-white p-2 md:p-3 rounded-xl md:rounded-2xl border border-white/10 backdrop-blur-md transition-all active:scale-95">
              <Maximize2 className="w-4 h-4 md:w-5 md:h-5" />
            </button>
-           <button onClick={onAdd} className="bg-primary hover:bg-white text-on-primary-container px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-headline font-black text-[10px] md:text-xs flex items-center gap-2 shadow-[0_20px_50px_rgba(142,213,255,0.3)] active:scale-95 transition-all uppercase tracking-widest">
+           <button onClick={onAdd} className="bg-tertiary hover:bg-white text-on-tertiary-container px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-headline font-black text-[10px] md:text-xs flex items-center gap-2 shadow-[0_20px_50px_rgba(86,229,169,0.3)] active:scale-95 transition-all uppercase tracking-widest">
              <Plus className="w-4 h-4" />
-             <span className="hidden sm:inline">NEW_FEED</span>
+             <span className="hidden sm:inline">INJECT_FEED</span>
              <span className="sm:hidden">ADD</span>
            </button>
         </div>
@@ -182,7 +183,7 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
       >
         <div className="flex items-center justify-between sticky top-0 bg-surface-container-high/80 backdrop-blur-xl -mx-4 -mt-4 md:-mx-6 md:-mt-6 p-4 md:p-6 border-b border-white/5 z-20">
            <div>
-             <h3 className="font-headline font-black text-white text-lg md:text-xl tracking-tighter uppercase leading-none">Vision_Hub</h3>
+             <h3 className="font-headline font-black text-white text-lg md:text-xl tracking-tighter uppercase leading-none italic glow-text">IMAGING_HUB</h3>
              <span className="text-[8px] md:text-[9px] text-outline font-headline tracking-[0.2em] uppercase">Multi-Spectral Blending</span>
            </div>
            <Zap className="w-4 h-4 md:w-5 md:h-5 text-tertiary animate-pulse" />
@@ -190,9 +191,9 @@ const VisionView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSour
 
         <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
            {/* Output Monitor Selection */}
-           <div className="bg-surface-container-low/80 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-primary/20 space-y-4">
+           <div className="bg-surface-container-low/80 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-tertiary/20 space-y-4">
               <div className="flex items-center gap-3 mb-2">
-                <Tv className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                <Tv className="w-4 h-4 md:w-5 md:h-5 text-tertiary" />
                 <h4 className="font-headline text-[9px] md:text-[10px] text-white tracking-[0.2em] font-black uppercase font-bold">Projector_Hub</h4>
               </div>
               
@@ -425,7 +426,21 @@ const VUMeter = ({ analyser, orientation = 'vertical', className = "" }: { analy
   return <canvas ref={canvasRef} width={orientation === 'vertical' ? 12 : 120} height={orientation === 'vertical' ? 120 : 12} className={className} />;
 };
 
-const MixerView = ({ channels, updateChannel, transcripts }: { channels: ChannelState[], updateChannel: (id: string, state: Partial<ChannelState>) => void, transcripts: string[] }) => {
+const ConsoleView = ({ 
+  channels, 
+  updateChannel, 
+  transcripts, 
+  masterLimiterActive,
+  crossoverGates,
+  toggleCrossoverGate
+}: { 
+  channels: ChannelState[], 
+  updateChannel: (id: string, state: Partial<ChannelState>) => void, 
+  transcripts: string[],
+  masterLimiterActive: boolean,
+  crossoverGates: CrossoverState,
+  toggleCrossoverGate: (gate: keyof CrossoverState) => void
+}) => {
   const mixerCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -436,7 +451,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
 
     let animationId: number;
     const draw = () => {
-      const analyser = ExtreamixEngine.getMasterAnalyser();
+      const analyser = audioEngine.getMasterAnalyser();
       if (!analyser) {
         animationId = requestAnimationFrame(draw);
         return;
@@ -470,16 +485,24 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
     <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-y-auto xl:overflow-hidden min-h-0 p-2 md:p-4 custom-scrollbar">
       {/* Mixer Console Area */}
       <div 
-        className="flex-[2.5] bg-surface-container-high/20 backdrop-blur-3xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 overflow-hidden min-h-[500px] xl:min-h-0 shadow-2xl"
+        className="flex-[2.5] bg-surface-container-high/20 backdrop-blur-3xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 overflow-hidden min-h-[400px] md:min-h-[500px] xl:min-h-0 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-2">
            <div>
-             <h3 className="font-headline font-black text-white text-lg md:text-xl tracking-tighter uppercase leading-none">SIGNAL_CONSOLE_v4</h3>
+             <h3 className="font-headline font-black text-white text-lg md:text-xl tracking-tighter uppercase leading-none italic glow-text">SIGNAL_CONSOLE_v4</h3>
              <span className="text-[8px] md:text-[9px] text-outline font-headline tracking-[0.2em] uppercase">Core Audio Mixing Engine</span>
            </div>
-           <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="font-mono text-[9px] text-primary font-black uppercase">LIVE_MIX</span>
+           
+           <div className="flex items-center gap-4">
+              {/* Master Limiter LED */}
+              <div className="flex bg-black/40 border border-white/5 px-3 py-1.5 rounded-full items-center gap-2 relative">
+                <span className="font-mono text-[8px] tracking-widest text-outline uppercase font-bold">BRICKWALL</span>
+                <div className={`w-2 h-2 rounded-full transition-colors duration-100 ${masterLimiterActive ? 'bg-error shadow-[0_0_15px_#f87171]' : 'bg-surface-container-highest'}`} />
+              </div>
+              <div className="flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                 <span className="font-mono text-[9px] text-primary font-black uppercase">LIVE_MIX</span>
+              </div>
            </div>
         </div>
         <div className="flex-1 flex gap-4 md:gap-6 overflow-x-auto pb-6 custom-scrollbar scroll-smooth">
@@ -499,7 +522,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
                 <div className="flex bg-surface-container-lowest/50 rounded-xl p-2 items-stretch gap-2">
                    {/* Channel VU Meter */}
                    <VUMeter 
-                    analyser={ExtreamixEngine.getChannelAnalyser(channel.id)}
+                    analyser={audioEngine.getChannelAnalyser(channel.id)} 
                     orientation="vertical" 
                     className="w-1.5 h-full opacity-80" 
                    />
@@ -633,29 +656,58 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
       <div 
         className="flex-1 flex flex-col gap-6 overflow-y-auto xl:overflow-hidden min-h-0 z-20 custom-scrollbar mt-4 xl:mt-0"
       >
-        {/* FFT Monitor */}
-        <div className="min-h-[240px] bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 flex flex-col shadow-2xl">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">Spectral_Analyser</h4>
+        {/* FFT Monitor & Crossovers */}
+        <div className="min-h-[280px] bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 flex flex-col shadow-2xl relative overflow-hidden">
+          <div className="p-6 pb-2 flex items-center justify-between z-10">
+            <h4 className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">Spectral_Analyser // Crossover</h4>
             <div className="flex items-center gap-4">
+               {/* Master Limiter Brickwall LED */}
+               <div className="flex items-center gap-2">
+                 <span className="font-headline text-[7px] text-error tracking-[0.2em] font-black uppercase">BRICKWALL</span>
+                 <div className={`w-2.5 h-2.5 rounded-full transition-all duration-75 ${
+                   masterLimiterActive ? 'bg-error shadow-[0_0_15px_#f87171] border border-error max-scale-125' : 'bg-black/50 border border-white/10'
+                 }`} />
+               </div>
+               
                {/* Master Output VU Meter */}
                <div className="flex flex-col items-end gap-1">
-                 <VUMeter analyser={ExtreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
+                 <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
                  <span className="font-mono text-[7px] text-outline/50 uppercase">MASTER_PEAK</span>
                </div>
-               <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" aria-hidden="true" />
             </div>
           </div>
-          <canvas 
-            ref={mixerCanvasRef} 
-            className="flex-1 w-full bg-black/40 rounded-xl border border-white/5 mb-2"
-            role="img"
-            aria-label="Real-time spectral analyzer monitor"
-          />
-          <div className="flex justify-between font-mono text-[8px] text-outline/50 uppercase">
-             <span>20Hz</span>
-             <span>Crossover Active</span>
-             <span>22kHz</span>
+
+          <div className="px-6 flex-1 flex flex-col relative z-10">
+            <canvas 
+              ref={mixerCanvasRef} 
+              className="flex-1 w-full bg-black/40 rounded-xl border border-white/5 mb-4"
+              role="img"
+              aria-label="Real-time spectral analyzer monitor"
+            />
+            {/* CROSSOVER GATES CONTROLS */}
+            <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-4 mb-4">
+               {[
+                 { id: 'low200', label: 'LOW_200Hz', color: 'text-error', border: 'border-error/50', bg: 'bg-error', active: crossoverGates.low200 },
+                 { id: 'mid1000', label: 'MID_1kHz', color: 'text-tertiary', border: 'border-tertiary/50', bg: 'bg-tertiary', active: crossoverGates.mid1000 },
+                 { id: 'high3000', label: 'HI_3kHz', color: 'text-primary', border: 'border-primary/50', bg: 'bg-primary', active: crossoverGates.high3000 }
+               ].map(gate => (
+                 <button 
+                   key={gate.id}
+                   onClick={() => toggleCrossoverGate(gate.id as keyof CrossoverState)}
+                   className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
+                     gate.active ? `bg-surface-container-highest ${gate.border}` : 'border-white/5 opacity-50 hover:bg-surface-container-highest hover:opacity-100'
+                   }`}
+                 >
+                   <div className="font-headline text-[7px] tracking-[0.2em] text-outline font-black mb-2 uppercase">{gate.label}</div>
+                   <div className={`w-8 h-2 rounded-full overflow-hidden bg-black/50 border border-white/10 relative`}>
+                     <div className={`absolute top-0 bottom-0 left-0 transition-all ${gate.bg} ${gate.active ? 'w-full' : 'w-0'}`} />
+                   </div>
+                   <span className={`mt-2 font-mono text-[8px] font-bold ${gate.active ? gate.color : 'text-outline/40'}`}>
+                     {gate.active ? 'ENGAGED' : 'BYPASS'}
+                   </span>
+                 </button>
+               ))}
+            </div>
           </div>
         </div>
 
@@ -684,179 +736,289 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
   );
 };
 
-const SequencerView = ({ state, toggleStep }: { state: SequencerState, toggleStep: (i: number) => void }) => {
+const PulseView = ({ state, toggleStep, onBpmChange, onTogglePlay }: { state: SequencerState, toggleStep: (i: number) => void, onBpmChange: (bpm: number) => void, onTogglePlay: () => void }) => {
   return (
-    <div className="flex-1 flex items-center justify-center p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar">
-      <div className="w-full max-w-4xl bg-surface-container-high rounded-2xl p-6 md:p-8 border-t border-primary/20 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-4 font-headline text-[10px] text-outline opacity-20 select-none" aria-hidden="true">SEQ_MATRIX_v1.0</div>
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-8">
         
-        <div className="flex flex-col gap-8 md:gap-12">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <h2 className="font-headline text-lg md:text-xl text-primary font-bold tracking-tighter">PULSE_ARRAY_GATE</h2>
-            <div className="flex items-center gap-4 bg-surface-container-low px-4 py-2 rounded-lg border border-white/5">
-              <Timer className="w-4 h-4 text-outline" aria-hidden="true" />
-              <span className="font-headline text-sm text-white font-bold">{state.bpm} BPM</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-16 gap-2 md:gap-3">
-            {state.steps.map((active, i) => (
-              <button
-                key={i}
-                onClick={() => toggleStep(i)}
-                aria-label={`Step ${i + 1}, ${active ? 'active' : 'inactive'}${state.currentStep === i ? ', currently at playhead' : ''}`}
-                aria-pressed={active}
-                className={`aspect-square rounded-lg border-2 transition-all duration-200 flex items-center justify-center relative overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary/50 ${
-                  active 
-                    ? "bg-primary border-primary shadow-[0_0_20px_rgba(56,189,248,0.4)]" 
-                    : "bg-surface-container-lowest border-white/5 hover:border-primary/40"
-                } ${state.currentStep === i ? "ring-4 ring-white/50" : ""}`}
+        {/* Header & Transport */}
+        <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6 border-b border-primary/20 pb-6">
+           <div>
+             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">PULSE_SEQ_v2</h2>
+             <span className="font-headline text-[10px] text-outline tracking-[0.4em] uppercase font-bold">Lookahead Scheduler // Logic Array</span>
+           </div>
+           
+           <div className="flex bg-black/50 border border-white/10 rounded-xl p-2 gap-2 shadow-2xl backdrop-blur-md">
+              <button 
+                onClick={onTogglePlay} 
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-headline font-black tracking-widest text-[10px] uppercase transition-all ${
+                  state.isPlaying ? 'bg-error text-on-error shadow-[0_0_15px_#f87171] animate-pulse' : 'bg-surface-container-high text-white hover:bg-white hover:text-black'
+                }`}
               >
-                {/* Background active state glow */}
-                {active && (
-                  <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
-                )}
-
-                {/* Trigger Animation */}
-                <AnimatePresence>
-                  {state.currentStep === i && (
-                    <>
-                      <motion.div 
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 2, opacity: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.4 }}
-                        className={`absolute inset-0 rounded-lg ${active ? 'bg-white' : 'bg-primary/40'}`}
-                      />
-                      <motion.div 
-                        layoutId="sequencerPulse"
-                        className={`absolute inset-0 ${active ? 'bg-white/40' : 'bg-primary/20'}`} 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      />
-                    </>
-                  )}
-                </AnimatePresence>
-
-                {/* Constant pulse for active steps during playback */}
-                {active && state.isPlaying && (
-                   <motion.div 
-                     animate={{ opacity: [0.3, 0.6, 0.3] }}
-                     transition={{ duration: 2, repeat: Infinity }}
-                     className="absolute inset-x-0 bottom-0 h-1 bg-white/30"
-                   />
-                )}
-
-                <span className={`font-headline text-[10px] font-bold z-10 transition-transform ${state.currentStep === i ? "scale-125" : ""} ${active ? "text-on-primary-container" : "text-outline/40 group-hover:text-outline"}`}>
-                  {i + 1}
-                </span>
-                
-                {/* Hit indicator dot */}
-                {active && (
-                   <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-white/60" />
-                )}
+                {state.isPlaying ? 'HALT_SEQ' : 'INITIATE'}
               </button>
-            ))}
-          </div>
+              
+              <div className="flex flex-col justify-center px-4 border-l border-white/10 w-32">
+                 <div className="flex justify-between items-center mb-1">
+                   <span className="font-headline text-[8px] text-outline tracking-widest uppercase">SYS_CLOCK</span>
+                   <span className="font-mono text-[10px] text-primary">{state.bpm} BPM</span>
+                 </div>
+                 <input 
+                   type="range" min="60" max="240" value={state.bpm} onChange={e => onBpmChange(parseInt(e.target.value))}
+                   className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer"
+                 />
+              </div>
+           </div>
+        </div>
 
-          <div className="flex justify-end gap-2 text-outline font-headline text-[10px] tracking-widest">
-            <span className="bg-surface-container-low px-2 py-1 rounded">16 STEPS</span>
-            <span className="bg-surface-container-low px-2 py-1 rounded">1/16 QUANTIZE</span>
-          </div>
+        {/* 16-Step Grid */}
+        <div className="bg-surface-container-highest/30 p-6 md:p-8 border border-white/5 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-sm">
+           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC41Ii8+PC9zdmc+')] opacity-20 pointer-events-none" />
+           
+           <div className="grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-16 gap-2 md:gap-4 position-relative z-10">
+             {state.steps.map((active, i) => {
+               const isPlayhead = state.currentStep === i;
+               const isDownbeat = i % 4 === 0;
+               return (
+                 <button
+                   key={i}
+                   onClick={() => toggleStep(i)}
+                   className={`group relative aspect-[2/3] flex flex-col items-center justify-end pb-3 rounded-md transition-all border outline-none ${
+                     active ? 'border-primary/50 shadow-[0px_0px_15px_rgba(56,189,248,0.3)] bg-gradient-to-t from-primary/30 to-black/40' : 'border-white/5 bg-black/60 hover:border-white/20'
+                   } ${isPlayhead ? 'border-white bg-white/10' : ''}`}
+                 >
+                   {/* Step Number Top */}
+                   <span className={`absolute top-2 font-headline text-[7px] tracking-widest uppercase ${active ? 'text-primary' : 'text-outline/30'} ${isDownbeat ? 'font-black' : ''}`}>
+                     {String(i + 1).padStart(2, '0')}
+                   </span>
+
+                   {/* Center Reticle (Active indication) */}
+                   <div className={`w-3 h-3 rounded-sm rotate-45 border transition-all ${
+                     active ? 'bg-primary border-primary shadow-[0_0_10px_#38bdf8] scale-110' : 'border-white/10 bg-transparent'
+                   } ${isPlayhead ? 'bg-white border-white scale-150' : ''}`} />
+
+                   {/* Bottom Indicator */}
+                   <div className={`mt-3 w-1/2 h-[2px] transition-all ${
+                     active ? 'bg-primary' : 'bg-white/5'
+                   } ${isDownbeat ? 'w-full' : ''}`} />
+                 </button>
+               );
+             })}
+           </div>
+        </div>
+
+        {/* Info Footer */}
+        <div className="flex justify-between items-center font-headline text-[8px] text-outline/50 tracking-[0.3em] border-t border-white/5 pt-4">
+           <span>TICK_RATE // 1/16th </span>
+           <span>LOGIC_ARRAY_ACTIVE // TRUE</span>
+           <span>MEMORY_ALLOC // 16B</span>
         </div>
       </div>
     </div>
   );
 };
 
-const RoutingView = () => {
-  const sources: RoutingSource[] = [
-    { id: '1', name: 'YouTube Tab - Lofi Beats', active: true, inputBus: 'BUS 1-2', virtualOut: 'MIXER_CH_1' },
-    { id: '2', name: 'Spotify Web Player', active: false, inputBus: 'BUS 3-4', virtualOut: 'MIXER_CH_2' },
-    { id: '3', name: 'System Audio', active: true, inputBus: 'SYS_1-2', virtualOut: 'MASTER' },
-  ];
-
+const MatrixCanvas = ({ 
+  sources, 
+  destinations, 
+  connections, 
+  onToggle 
+}: { 
+  sources: RoutingSource[], 
+  destinations: RoutingDestination[], 
+  connections: RoutingConnection[],
+  onToggle: (sId: string, dId: string) => void
+}) => {
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-6 p-4 md:p-6 overflow-y-auto md:overflow-hidden lg:p-8 custom-scrollbar">
-      <div className="flex-1 min-h-[300px] flex flex-col items-center justify-center relative bg-surface-container-high/20 rounded-3xl border border-white/5 p-8 lg:p-12">
-        <div className="absolute inset-0 opacity-[0.03] flex items-center justify-center pointer-events-none" aria-hidden="true">
-          <RouteIcon className="w-48 h-48 md:w-[400px] md:h-[400px]" />
-        </div>
-        <div className="glass-panel p-8 md:p-12 rounded-2xl border-t border-primary/20 shadow-2xl text-center max-w-md glow-primary">
-          <RouteIcon className="w-12 h-12 md:w-16 md:h-16 text-primary mx-auto mb-6 drop-shadow-[0_0_15px_#8ed5ff]" />
-          <h2 className="font-headline text-xl md:text-2xl font-bold mb-4 tracking-tight">MATRIX_CANVAS_v1</h2>
-          <p className="font-body text-xs md:text-sm text-outline mb-8">Establish signal pathways across the virtual matrix bus. Select input nodes to patch into destination channels.</p>
-          <div className="flex justify-center gap-4 md:gap-6 font-headline text-[8px] md:text-[10px] tracking-widest text-outline uppercase border-t border-white/5 pt-6">
-            <span>SYSTEM_READY</span>
-            <span>•</span>
-            <span>LATENCY_0.4MS</span>
-          </div>
+    <div className="flex-1 w-full bg-black/40 rounded-3xl border border-white/5 relative overflow-hidden flex flex-col p-4 md:p-8">
+      {/* Grid Headers - Top (Destinations) */}
+      <div className="flex mb-4">
+        <div className="w-24 md:w-32 flex-shrink-0" /> {/* Corner Spacer */}
+        <div className="flex-1 flex justify-around">
+          {destinations.map(dst => (
+            <div key={dst.id} className="flex-1 flex flex-col items-center group">
+              <span className="font-headline text-[7px] md:text-[9px] text-outline/50 tracking-[0.2em] uppercase origin-bottom -rotate-45 mb-2 group-hover:text-primary transition-colors">{dst.name}</span>
+              <div className="w-px h-12 bg-white/5 group-hover:bg-primary/20" />
+            </div>
+          ))}
         </div>
       </div>
 
-      <aside className="w-full md:w-80 lg:w-96 flex flex-col bg-surface-container-high/40 rounded-3xl border border-white/10 p-6 backdrop-blur-2xl shadow-2xl overflow-y-auto custom-scrollbar">
-        <div className="mb-8">
-           <h3 className="font-headline font-black text-primary text-xl tracking-tighter glow-text">PATCH_MATRIX_HUB</h3>
-           <p className="font-headline text-[10px] text-outline tracking-widest uppercase mt-1">BUS_ROUTING_BAY</p>
-        </div>
-        
-        <div className="flex-1 flex flex-col gap-4 overflow-y-visible pr-2">
-          <span className="font-headline text-[9px] md:text-[10px] text-outline/50 tracking-widest uppercase mb-2">ACTIVE_SOURCES</span>
-          {sources.map(source => (
-            <div key={source.id} className={`p-4 rounded-xl border-t border-white/5 transition-all ${source.active ? 'bg-surface-container-low border-primary/20' : 'bg-surface-container-lowest opacity-40'}`}>
-              <div className="flex justify-between items-center mb-4 gap-4">
-                 <div className="flex items-center gap-2 overflow-hidden">
-                    {source.id === '1' ? <Monitor className="w-4 h-4 text-outline flex-shrink-0" /> : <Music className="w-4 h-4 text-outline flex-shrink-0" />}
-                    <span className="font-body text-xs md:text-sm font-medium truncate">{source.name}</span>
-                 </div>
-                 <button 
-                  aria-label={`Toggle routing for ${source.name}`}
-                  aria-pressed={source.active}
-                  className={`w-8 h-4 rounded-full relative transition-all flex-shrink-0 ${source.active ? 'bg-primary shadow-[0_0_10px_#38bdf8]' : 'bg-surface-container-highest'}`}
-                 >
-                   <div className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full transition-all ${source.active ? 'right-0.5' : 'left-0.5'}`} />
-                 </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                 <div className="space-y-1">
-                   <label id={`input-bus-label-${source.id}`} className="font-headline text-[8px] text-outline tracking-widest uppercase block">INPUT_BUS</label>
-                   <button 
-                    aria-labelledby={`input-bus-label-${source.id}`}
-                    className="w-full flex items-center justify-between text-[10px] font-bold text-white bg-black/20 p-2 rounded cursor-pointer group focus:ring-2 focus:ring-primary/50"
-                   >
-                     {source.inputBus} <ChevronDown className="w-3 h-3 opacity-20 group-hover:opacity-100" />
-                   </button>
-                 </div>
-                 <div className="space-y-1">
-                   <label id={`virtual-out-label-${source.id}`} className="font-headline text-[8px] text-outline tracking-widest uppercase block">VIRTUAL_OUT</label>
-                   <button 
-                    aria-labelledby={`virtual-out-label-${source.id}`}
-                    className="w-full flex items-center justify-between text-[10px] font-bold text-white bg-black/20 p-2 rounded cursor-pointer group focus:ring-2 focus:ring-primary/50"
-                   >
-                     {source.virtualOut} <ChevronDown className="w-3 h-3 opacity-20 group-hover:opacity-100" />
-                   </button>
-                 </div>
-              </div>
+      {/* Main Grid Area */}
+      <div className="flex-1 flex">
+        {/* Row Headers (Sources) */}
+        <div className="w-24 md:w-32 flex flex-col justify-around py-2">
+          {sources.map(src => (
+            <div key={src.id} className="flex items-center gap-2 group h-12">
+               <div className={`w-1 h-3 rounded-full ${src.active ? 'bg-primary' : 'bg-outline/20'}`} />
+               <span className="font-headline text-[7px] md:text-[9px] text-outline font-black tracking-widest uppercase transition-colors group-hover:text-tertiary truncate">{src.name}</span>
             </div>
           ))}
         </div>
 
-        <div className="mt-8 flex gap-3 sticky bottom-0 bg-surface-container-high/80 pt-4 border-t border-white/5">
-          <button className="flex-1 bg-surface-container-highest/40 border border-white/5 text-outline py-3 md:py-4 rounded-xl font-headline text-[10px] tracking-widest hover:text-white transition-all uppercase active:scale-95">RESET</button>
-          <button className="flex-[2] bg-gradient-to-br from-primary to-primary-container text-on-primary-container py-3 md:py-4 rounded-xl font-headline font-black text-[10px] tracking-widest shadow-lg hover:shadow-primary/20 transition-all uppercase active:scale-95">DEPLOY</button>
+        {/* The Actual Matrix */}
+        <div className="flex-1 flex flex-col justify-around relative bg-gradient-to-br from-white/5 to-transparent rounded-2xl p-2 md:p-4">
+           {/* Animated Background Flow */}
+           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
+              <motion.div 
+                animate={{ backgroundPosition: ['0% 0%', '100% 100%'] }}
+                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+                className="w-full h-full bg-[radial-gradient(circle,rgba(56,189,248,0.2)_1px,transparent_1px)] [background-size:24px_24px]"
+              />
+           </div>
+
+           {sources.map(src => (
+             <div key={src.id} className="flex-1 flex items-center justify-around group h-12 border-b border-white/[0.02]">
+                {destinations.map(dst => {
+                  const isConnected = connections.some(c => c.sourceId === src.id && c.destinationId === dst.id);
+                  return (
+                    <button
+                      key={`${src.id}-${dst.id}`}
+                      onClick={() => onToggle(src.id, dst.id)}
+                      className={`w-4 h-4 md:w-6 md:h-6 rounded flex items-center justify-center transition-all relative group/node ${
+                        isConnected 
+                          ? 'bg-primary shadow-[0_0_15px_#38bdf8] scale-110' 
+                          : 'bg-white/5 hover:bg-white/10'
+                      }`}
+                      aria-label={`Route ${src.name} to ${dst.name}`}
+                      aria-pressed={isConnected}
+                    >
+                      {/* Connection Lines (Simulated with nodes) */}
+                      {isConnected && (
+                        <>
+                          <motion.div 
+                            layoutId={`signal-${src.id}-${dst.id}`}
+                            className="absolute inset-0 bg-primary blur-sm rounded animate-pulse" 
+                          />
+                          <div className="w-1.5 h-1.5 bg-white rounded-full z-10" />
+                        </>
+                      )}
+                      
+                      {!isConnected && <div className="w-1 h-1 bg-white/10 rounded-full group-hover/node:bg-white/30 transition-colors" />}
+                    </button>
+                  );
+                })}
+             </div>
+           ))}
         </div>
-      </aside>
+      </div>
+
+      <div className="mt-8 flex items-center gap-4 border-t border-white/5 pt-4">
+         <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-primary" />
+            <span className="font-headline text-[8px] text-outline tracking-widest uppercase">CONNECTION_ESTABLISHED</span>
+         </div>
+         <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-white/5" />
+            <span className="font-headline text-[8px] text-outline/40 tracking-widest uppercase">NODE_AVAILABLE</span>
+         </div>
+         <div className="ml-auto flex items-center gap-2">
+            <Zap className="w-3 h-3 text-tertiary" />
+            <span className="font-headline text-[8px] text-tertiary tracking-[0.3em] font-black uppercase italic">SIGNAL_OPTIMIZED</span>
+         </div>
+      </div>
     </div>
   );
 };
 
-const LibraryView = () => {
-  const presets = [
-    { title: "Deep Space Lead", author: "Architect", tags: ["120 BPM", "POLY SYNTH"], active: true },
-    { title: "Neon Kick", author: "VoidDrums", tags: ["ONE SHOT", "DRUM"], active: false },
-    { title: "Ethereal Pad", author: "CloudWalker", tags: ["AMBIENT", "TEXTURE"], active: false },
-  ];
+const MatrixView = ({
+  mappings
+}: {
+  mappings: MatrixMapping[]
+}) => {
+  return (
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem]">
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+        
+        {/* Header */}
+        <div className="mb-6 flex justify-between items-end border-b border-primary/20 pb-4">
+           <div>
+             <h2 className="font-headline text-3xl md:text-4xl text-primary font-black tracking-tighter uppercase leading-none italic glow-text">MATRIX_MAPPER_v3</h2>
+             <p className="font-headline text-[10px] text-outline tracking-widest uppercase mt-2">Physical interface signal routing / MIDI CC Assignment</p>
+           </div>
+           <div className="flex gap-2">
+              <span className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-xl font-headline text-[9px] tracking-[0.2em] font-black uppercase shadow-[0_0_15px_rgba(56,189,248,0.2)]">MIDI_BRIDGE_ACTIVE</span>
+           </div>
+        </div>
+
+        {/* Matrix Grids */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+           
+           {/* Crossover Gates */}
+           <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                 <div className="w-2 h-2 bg-outline rotate-45" />
+                 <h3 className="font-headline text-xs text-white uppercase tracking-[0.3em] font-black">Crossover_Gates</h3>
+              </div>
+              <div className="flex flex-col gap-3">
+                 {mappings.filter(m => m.target.startsWith('GATE')).map(m => (
+                   <div key={m.id} className="bg-surface-container-high/60 border border-white/5 p-4 rounded-2xl flex items-center justify-between backdrop-blur-md group hover:border-primary/40 transition-all">
+                      <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-full border-2 border-outline/20 relative flex items-center justify-center">
+                            <div className="absolute top-1.5 w-1 h-3.5 bg-primary rounded-full origin-bottom rotate-[-120deg]" />
+                         </div>
+                         <div>
+                            <div className="font-headline text-sm text-white font-black uppercase leading-none tracking-tight">{m.target.replace('GATE_', '').replace('_', ' ')}</div>
+                            <div className="font-mono text-[9px] text-outline mt-1">CC_WAITING...</div>
+                         </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                         <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
+                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner">
+                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                         </div>
+                      </div>
+                   </div>
+                 ))}
+              </div>
+           </div>
+
+           {/* WebGL Shader Uniforms */}
+           <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                 <div className="w-2 h-2 bg-tertiary rotate-45 shadow-[0_0_10px_#56e5a9]" />
+                 <h3 className="font-headline text-xs text-white uppercase tracking-[0.3em] font-black">Shader_Uniforms</h3>
+              </div>
+              <div className="flex flex-col gap-3">
+                 {mappings.filter(m => m.target.startsWith('SHADER')).map(m => (
+                   <div key={m.id} className="bg-surface-container-high/60 border border-white/5 p-4 rounded-2xl flex items-center justify-between backdrop-blur-md group hover:border-tertiary/40 transition-all">
+                      <div className="flex items-center gap-4">
+                         <div className="w-10 h-10 rounded-full border-2 border-outline/20 relative flex items-center justify-center">
+                            <div className="absolute top-1.5 w-1 h-3.5 bg-tertiary rounded-full origin-bottom rotate-[45deg]" />
+                         </div>
+                         <div>
+                            <div className="font-headline text-sm text-white font-black uppercase leading-none tracking-tight">{m.target.replace('SHADER_', '').replace('_', ' ')}</div>
+                            <div className="font-mono text-[9px] text-outline mt-1">VAL: {m.value.toFixed(2)}</div>
+                         </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                         <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
+                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner">
+                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                         </div>
+                      </div>
+                   </div>
+                 ))}
+              </div>
+           </div>
+
+        </div>
+
+        {/* Global Action */}
+        <div className="mt-8 flex justify-center">
+           <button className="bg-transparent border-2 border-white/10 hover:border-white/40 text-outline hover:text-white px-8 py-4 rounded-2xl font-headline text-[10px] uppercase tracking-[0.3em] font-black transition-all active:scale-95">
+             RESCAN_MIDI_INTERFACES
+           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], onLoadPreset: (id: string) => void }) => {
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(presets[0]?.id || null);
+
+  const activePreset = presets.find(p => p.id === selectedPreset);
 
   return (
     <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 bg-surface">
@@ -866,15 +1028,15 @@ const LibraryView = () => {
              <Settings className="w-5 h-5 text-outline mr-3 group-hover:text-primary transition-colors" aria-hidden="true" />
              <input 
               type="text" 
-              placeholder="QUERY_REGISTRY..." 
+              placeholder="QUERY_REGISTRY_DATABASE..." 
               aria-label="Search available synth patches and presets"
               className="bg-transparent border-none outline-none text-white font-headline text-sm w-full placeholder:text-outline/30" 
              />
            </div>
            <div className="flex flex-wrap gap-2">
-             {['ATMOS', 'KINETIC', 'TECH', 'GRAVITY'].map(tag => (
+             {['ALL', 'AGGR', 'SYNC', 'VOID', 'LO', 'HI'].map(tag => (
                <button key={tag} className={`px-4 py-1.5 rounded-full font-headline text-[9px] md:text-[10px] tracking-widest uppercase border transition-all active:scale-95 ${
-                 tag === 'ATMOS' ? 'bg-primary/20 border-primary text-primary shadow-[0_0_10px_rgba(56,189,248,0.2)]' : 'bg-surface-container-high border-white/5 text-outline hover:text-white hover:border-primary/20'
+                 tag === 'ALL' ? 'bg-primary/20 border-primary text-primary shadow-[0_0_10px_rgba(56,189,248,0.2)]' : 'bg-surface-container-high border-white/5 text-outline hover:text-white hover:border-primary/20'
                }`}>
                  {tag}
                </button>
@@ -883,69 +1045,63 @@ const LibraryView = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6">
-          {presets.map(p => (
-            <button 
-              key={p.title} 
-              aria-label={`Preset: ${p.title} by ${p.author}. ${p.active ? 'Current selection' : 'Click to select'}`}
-              className={`p-5 md:p-6 rounded-3xl transition-all duration-300 relative overflow-hidden group text-left focus:outline-none focus:ring-2 focus:ring-primary/50 ${
-                p.active ? 'bg-surface-container-high border-t border-primary/20 shadow-2xl scale-[1.02]' : 'bg-surface-container-low border border-white/5 hover:bg-surface-container-high hover:scale-[1.01]'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4 md:mb-6">
-                 <div>
-                   <h3 className={`font-headline text-base md:text-lg font-black mb-1 leading-none ${p.active ? 'text-primary glow-text' : 'text-white group-hover:text-primary transition-colors'}`}>{p.title}</h3>
-                   <p className="text-[9px] text-outline font-headline uppercase tracking-tighter">by {p.author}</p>
-                 </div>
-                 {p.active && <Plus className="w-4 h-4 text-tertiary" aria-hidden="true" />}
-              </div>
-              <div className="h-16 w-full bg-black/40 rounded-xl mb-6 flex items-end justify-center gap-1.5 overflow-hidden p-2 shadow-inner">
-                 {[1,2,3,4,5,6,7,8,9,10].map(i => (
-                    <motion.div 
-                      key={i}
-                      animate={{ height: p.active ? [20, 48, 24, 56, 30] : 8 }}
-                      transition={{ 
-                        repeat: Infinity, 
-                        duration: p.active ? (0.8 + i * 0.1) : 2,
-                        delay: i * 0.05
-                      }}
-                      className={`w-1 rounded-full ${p.active ? 'bg-primary shadow-[0_0_10px_#38bdf8]' : 'bg-outline/10'}`} 
-                    />
-                 ))}
-              </div>
-              <div className="flex flex-wrap gap-2 font-headline text-[8px] text-outline tracking-[0.2em] uppercase">
-                {p.tags.map(t => <span key={t} className="bg-white/5 px-2 py-0.5 rounded">{t}</span>)}
-              </div>
-            </button>
-          ))}
+          {presets.map(p => {
+            const isActive = selectedPreset === p.id;
+            return (
+              <button 
+                key={p.id} 
+                onClick={() => setSelectedPreset(p.id)}
+                aria-label={`Preset: ${p.name}. ${isActive ? 'Current selection' : 'Click to select'}`}
+                className={`p-5 md:p-6 rounded-3xl transition-all duration-300 relative overflow-hidden group text-left focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                  isActive ? 'bg-surface-container-high border-l-4 border-primary shadow-2xl scale-[1.02]' : 'bg-surface-container-low border border-white/5 hover:bg-surface-container-high hover:scale-[1.01]'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-4 md:mb-6">
+                   <div>
+                     <h3 className={`font-headline text-base md:text-lg font-black mb-1 leading-none ${isActive ? 'text-primary glow-text' : 'text-white group-hover:text-primary transition-colors'}`}>{p.name}</h3>
+                     <p className="text-[9px] text-outline font-headline uppercase tracking-tighter">ID: {p.id} // TS: {p.lastModified}</p>
+                   </div>
+                   {isActive && <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_#38bdf8]" aria-hidden="true" />}
+                </div>
+                
+                <div className="flex flex-wrap gap-2 font-headline text-[8px] text-outline tracking-[0.2em] uppercase mt-4">
+                  {p.tags.map(t => <span key={t} className="bg-white/5 px-2 py-0.5 rounded border border-white/10">{t}</span>)}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <aside className="w-full xl:w-96 bg-surface-container-low/40 border-l border-white/10 p-6 md:p-8 flex flex-col backdrop-blur-3xl shadow-2xl xl:static fixed inset-y-0 right-0 z-40 translate-x-full xl:translate-x-0 transition-transform">
+      <aside className="w-full xl:w-[400px] bg-surface-container-low border-l border-white/10 p-6 md:p-8 flex flex-col shadow-2xl xl:static fixed inset-y-0 right-0 z-40 translate-x-full xl:translate-x-0 transition-transform">
          <div className="mb-2">
-            <span className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">PATCH_SPEC_v4</span>
+            <span className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">REGISTRY_INSPECTOR</span>
          </div>
-         <h2 className="font-headline text-2xl md:text-3xl text-white font-black tracking-tighter glow-text mb-4 uppercase">DEEP_SPACE_LEAD</h2>
-         <p className="font-body text-sm text-outline mb-10 leading-relaxed font-light">A dense, evolving polyphonic synthesizer patch perfect for cinematic scores and deep techno breakdowns.</p>
-         
-         <div className="grid grid-cols-2 gap-4 mb-10">
-            <div className="bg-black/20 p-4 md:p-5 rounded-2xl flex flex-col items-center gap-4 border border-white/5 group hover:border-primary/40 transition-all cursor-pointer">
-               <div className="w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-outline/20 relative flex items-center justify-center group-hover:border-primary/40 transition-all">
-                  <div className="absolute top-2 w-1.5 h-5 bg-primary rounded-full origin-bottom rotate-45 shadow-[0_0_10px_#38bdf8]" />
-               </div>
-               <span className="font-headline text-[8px] md:text-[9px] text-outline tracking-wider font-bold uppercase">CUTOFF</span>
-            </div>
-             <div className="bg-black/20 p-4 md:p-5 rounded-2xl flex flex-col items-center gap-4 border border-white/5 group hover:border-tertiary/40 transition-all cursor-pointer">
-               <div className="w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-outline/20 relative flex items-center justify-center group-hover:border-tertiary/40 transition-all">
-                  <div className="absolute top-2 w-1.5 h-5 bg-tertiary rounded-full origin-bottom -rotate-45 shadow-[0_0_10px_#56e5a9]" />
-               </div>
-               <span className="font-headline text-[8px] md:text-[9px] text-outline tracking-wider font-bold text-center uppercase">RESONANCE</span>
-            </div>
-         </div>
+         {activePreset ? (
+           <>
+             <h2 className="font-headline text-2xl md:text-3xl text-white font-black tracking-tighter glow-text mb-4 uppercase">{activePreset.name}</h2>
+             <p className="font-body text-sm text-outline mb-8 leading-relaxed font-light">{activePreset.description}</p>
+             
+             <div className="flex bg-black/40 border border-white/5 p-4 rounded-xl flex-col gap-2 mb-10 overflow-hidden">
+                <span className="font-headline text-[8px] text-outline/50 uppercase tracking-[0.3em]">JSON_PATCH_DATA</span>
+                <pre className="font-mono text-[10px] text-tertiary overflow-hidden text-ellipsis">
+                  {JSON.stringify(JSON.parse(activePreset.patchData), null, 2)}
+                </pre>
+             </div>
 
-         <button className="mt-auto bg-primary hover:bg-white text-on-primary-container py-4 md:py-5 rounded-2xl font-headline font-black text-xs tracking-widest shadow-2xl active:scale-[0.98] transition-all uppercase flex items-center justify-center gap-3">
-            <Plus className="w-4 h-4" />
-            ADD_TO_SESSION
-         </button>
+             <button 
+               onClick={() => onLoadPreset(activePreset.id)}
+               className="mt-auto bg-primary hover:bg-white text-on-primary-container py-4 md:py-5 rounded-2xl font-headline font-black text-xs tracking-widest shadow-2xl active:scale-[0.98] transition-all uppercase flex items-center justify-center gap-3"
+             >
+                <Plus className="w-4 h-4" />
+                ADD_TO_SESSION
+             </button>
+           </>
+         ) : (
+           <div className="flex-1 flex items-center justify-center font-headline text-xs text-outline/50 uppercase tracking-[0.3em]">
+              NO_PRESET_SELECTED
+           </div>
+         )}
       </aside>
     </div>
   );
@@ -973,6 +1129,7 @@ const ProjectorView = () => {
 
 export default function App() {
   const isProjector = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('projector') === 'true';
+  const [isLaunched, setIsLaunched] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
   const [channels, setChannels] = useState<ChannelState[]>([
     { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
@@ -1045,15 +1202,79 @@ export default function App() {
     isPlaying: false
   });
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
+  const [routingSources, setRoutingSources] = useState<RoutingSource[]>([
+    { id: 'src-1', name: 'TAB_AUDIO_LOFI', active: true, type: 'tab' },
+    { id: 'src-2', name: 'MIC_INPUT_PRIMARY', active: true, type: 'mic' },
+    { id: 'src-3', name: 'OSC_GENERATOR_A', active: true, type: 'generator' },
+  ]);
+
+  const [routingDestinations] = useState<RoutingDestination[]>([
+    { id: 'dst-1', name: 'CONSOLE_CH_1' },
+    { id: 'dst-2', name: 'CONSOLE_CH_2' },
+    { id: 'dst-3', name: 'CONSOLE_CH_3' },
+    { id: 'dst-4', name: 'CONSOLE_CH_4' },
+    { id: 'dst-5', name: 'MASTER_OUT' },
+  ]);
+
+  const [routingConnections, setRoutingConnections] = useState<RoutingConnection[]>([
+    { sourceId: 'src-1', destinationId: 'dst-1' },
+    { sourceId: 'src-2', destinationId: 'dst-4' },
+    { sourceId: 'src-3', destinationId: 'dst-3' },
+  ]);
+
+  // --- EXTREAMIX Overhaul States ---
+  const [crossoverGates, setCrossoverGates] = useState({
+    low200: true,
+    mid1000: false,
+    high3000: true
+  });
+
+  const [shaderUniforms, setShaderUniforms] = useState({
+    rgbSplit: 0.5,
+    pixelation: 0.1
+  });
+
+  const [matrixMappings, setMatrixMappings] = useState<MatrixMapping[]>([
+    { id: 'm1', target: 'GATE_LOW_200', midiCC: 14, value: 1 },
+    { id: 'm2', target: 'GATE_MID_1000', midiCC: 15, value: 0 },
+    { id: 'm3', target: 'GATE_HIGH_3000', midiCC: 16, value: 1 },
+    { id: 'm4', target: 'SHADER_RGB_SPLIT', midiCC: 74, value: 0.5 },
+    { id: 'm5', target: 'SHADER_PIXELATION', midiCC: 75, value: 0.1 }
+  ]);
+
+  const [registryPresets, setRegistryPresets] = useState([
+    { id: 'p1', name: 'HYPER_DRIVE_01', description: 'Aggressive compression and extreme RGB splitting.', tags: ['AGGR', 'SYNC'], lastModified: '2026-04-18', patchData: '{"hue": "shift"}' },
+    { id: 'p2', name: 'VOID_AMBIENCE', description: 'Submersive low-pass routing with heavy pixelation.', tags: ['VOID', 'LO'], lastModified: '2026-04-17', patchData: '{"pixel": "max"}' },
+  ]);
+
+  // Master Limiter state for LED feedback in Console
+  const [masterLimiterActive, setMasterLimiterActive] = useState(false);
+
 
   useEffect(() => {
-    ExtreamixEngine.init();
-    channels.forEach(ch => ExtreamixEngine.createChannel(ch.id, ch));
+    audioEngine.init();
+    channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
     
-    ExtreamixEngine.onStep = (step) => {
+    audioEngine.onStep = (step) => {
       setSequencer(prev => ({ ...prev, currentStep: step }));
+      // Simulate limiter catching peaks on downbeats
+      if (step % 4 === 0) {
+        setMasterLimiterActive(true);
+        setTimeout(() => setMasterLimiterActive(false), 100);
+      }
     };
   }, []);
+
+  const toggleCrossoverGate = (gate: keyof typeof crossoverGates) => {
+    setCrossoverGates(prev => ({ ...prev, [gate]: !prev[gate] }));
+  };
+
+  const loadPreset = (presetId: string) => {
+    console.log(`[EXTREAMIX_LOADER] Injecting JSON patch for session: ${presetId}`);
+    // Simulate loading a preset by briefly triggering the limiter LED and logging
+    setMasterLimiterActive(true);
+    setTimeout(() => setMasterLimiterActive(false), 300);
+  };
 
   const handleRouteExternalTab = async () => {
     try {
@@ -1072,7 +1293,7 @@ export default function App() {
       
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
-        ExtreamixEngine.routeStreamToChannel(stream, 'ch-1');
+        audioEngine.routeStreamToChannel(stream, 'ch-1');
         // Update transcription to show something happened
         setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
@@ -1083,10 +1304,10 @@ export default function App() {
 
   const handlePlay = () => {
     if (sequencer.isPlaying) {
-      ExtreamixEngine.stopSequencer();
+      audioEngine.stopSequencer();
       setSequencer(prev => ({ ...prev, isPlaying: false, currentStep: -1 }));
     } else {
-      ExtreamixEngine.startSequencer(sequencer.bpm, sequencer.steps);
+      audioEngine.startSequencer(sequencer.bpm, sequencer.steps);
       setSequencer(prev => ({ ...prev, isPlaying: true }));
     }
   };
@@ -1106,7 +1327,7 @@ export default function App() {
       
       // If audio exists, route it too
       if (source.audioChannelId) {
-        ExtreamixEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
+        audioEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
       }
     } catch (err) {
       console.error('Failed to add video source:', err);
@@ -1119,7 +1340,7 @@ export default function App() {
 
     if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
       if (update.audioChannelId) {
-        ExtreamixEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
+        audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
       }
     }
 
@@ -1127,11 +1348,21 @@ export default function App() {
     setVideoSources(videoEngine.getSources());
   };
 
+  const toggleRoutingConnection = (sourceId: string, destinationId: string) => {
+    setRoutingConnections(prev => {
+      const exists = prev.find(c => c.sourceId === sourceId && c.destinationId === destinationId);
+      if (exists) {
+        return prev.filter(c => !(c.sourceId === sourceId && c.destinationId === destinationId));
+      }
+      return [...prev, { sourceId, destinationId }];
+    });
+  };
+
   const updateChannel = (id: string, update: Partial<ChannelState>) => {
     setChannels(prev => prev.map(ch => {
       if (ch.id === id) {
         const next = { ...ch, ...update };
-        ExtreamixEngine.updateChannel(id, next);
+        audioEngine.updateChannel(id, next);
         return next;
       }
       return ch;
@@ -1148,10 +1379,14 @@ export default function App() {
     return <ProjectorView />;
   }
 
+  if (!isLaunched) {
+    return <LandingPage onInitiate={() => setIsLaunched(true)} />;
+  }
+
   return (
-    <div className="h-screen w-screen flex flex-col bg-surface overflow-hidden">
+    <div className="h-[100dvh] w-screen flex flex-col bg-surface overflow-hidden">
       {/* Top Bar - Simplified for mobile */}
-      <header className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between bg-surface/80 backdrop-blur-xl border-b border-white/5 z-50">
+      <header className="h-14 md:h-16 flex-shrink-0 px-4 md:px-8 flex items-center justify-between bg-surface/80 backdrop-blur-xl border-b border-white/5 z-50">
         <div className="flex items-center gap-4 md:gap-12">
           <div className="flex flex-col">
             <h1 className="text-lg md:text-2xl font-black text-primary italic font-headline tracking-tighter glow-text leading-none">EXTREAMIX</h1>
@@ -1235,9 +1470,9 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-16 md:pb-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* Navigation - Bottom bar on mobile, Sidebar on desktop */}
-        <nav className="fixed bottom-0 left-0 right-0 h-16 bg-surface-container-high/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-around z-40 transition-all md:relative md:w-20 lg:w-24 md:h-full md:flex-col md:border-t-0 md:border-r md:justify-start md:py-8 lg:p-0">
+        <nav className="fixed bottom-0 left-0 right-0 h-16 md:h-auto bg-surface-container-high/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-around z-40 transition-all md:relative md:w-20 lg:w-24 md:flex-col md:border-t-0 md:border-r md:justify-start md:py-8 lg:p-0">
            <div className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4">
             <Music className="w-5 h-5 md:w-6 md:h-6 text-primary" />
           </div>
@@ -1256,8 +1491,8 @@ export default function App() {
         </nav>
 
         {/* Workspace */}
-        <main className="flex-1 overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative">
-          <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none">
+        <main className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar">
+          <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
             <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
           </div>
           
@@ -1270,18 +1505,50 @@ export default function App() {
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col z-10"
             >
-              {currentView === 'mixer' && <MixerView channels={channels} updateChannel={updateChannel} transcripts={transcripts} />}
-              {currentView === 'vision' && <VisionView sources={videoSources} onUpdate={updateVideoSource} onAdd={handleAddVideoSource} channels={channels} />}
-              {currentView === 'sequencer' && <SequencerView state={sequencer} toggleStep={toggleStep} />}
-              {currentView === 'routing' && <RoutingView />}
-              {currentView === 'library' && <LibraryView />}
+              {currentView === 'mixer' && (
+                <ConsoleView 
+                  channels={channels} 
+                  updateChannel={updateChannel} 
+                  transcripts={transcripts} 
+                  masterLimiterActive={masterLimiterActive}
+                  crossoverGates={crossoverGates}
+                  toggleCrossoverGate={toggleCrossoverGate}
+                />
+              )}
+              {currentView === 'vision' && (
+                <ImagingView 
+                  sources={videoSources} 
+                  onUpdate={updateVideoSource} 
+                  onAdd={handleAddVideoSource} 
+                  channels={channels} 
+                />
+              )}
+              {currentView === 'sequencer' && (
+                <PulseView 
+                  state={sequencer} 
+                  toggleStep={toggleStep} 
+                  onBpmChange={(bpm) => setSequencer(prev => ({ ...prev, bpm }))}
+                  onTogglePlay={handlePlay}
+                />
+              )}
+              {currentView === 'routing' && (
+                <MatrixView 
+                  mappings={matrixMappings} 
+                />
+              )}
+              {currentView === 'library' && (
+                <RegistryView 
+                  presets={registryPresets}
+                  onLoadPreset={loadPreset}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
 
       {/* Footer / Preview Strip - Hidden on small mobile */}
-      <footer className="h-14 md:h-20 px-4 md:px-8 bg-surface-container-high/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between z-30 hidden sm:flex">
+      <footer className="h-14 md:h-20 flex-shrink-0 px-4 md:px-8 bg-surface-container-high/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between z-30 hidden sm:flex">
         <div className="flex items-center gap-3 md:gap-6">
           <button 
             onClick={handlePlay}
@@ -1299,7 +1566,7 @@ export default function App() {
 
         <div className="flex items-center gap-6 md:gap-12">
            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5">
-              <VUMeter analyser={ExtreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
+              <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
            </div>
            
            <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 import { VideoSource } from '../types';
-import { extreamixEngine } from './ExtreamixEngine';
+import { audioEngine } from './audioEngine';
 import { extreamixMatrix } from './ExtreamixMatrix';
 
 const vsSource = `#version 300 es
@@ -191,7 +191,7 @@ class VideoEngine {
       gl.useProgram(this.program);
       gl.bindVertexArray(this.vao);
 
-      const audioCtx = extreamixEngine.getContext();
+      const audioCtx = audioEngine.getContext();
       const currentTime = audioCtx ? audioCtx.currentTime : 0;
       const pulseGate = extreamixMatrix.getWebGLUniform('u_pulseGate', currentTime);
       gl.uniform1f(this.pulseGateLocation, pulseGate);
