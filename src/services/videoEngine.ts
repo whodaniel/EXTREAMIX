@@ -1,4 +1,7 @@
 import { VideoSource } from '../types';
+import { extreamixEngine } from './extreamixEngine';
+import { audioEngine } from './audioEngine';
+
 
 class VideoEngine {
   private sources: Map<string, VideoSource> = new Map();
@@ -60,13 +63,21 @@ class VideoEngine {
       if (!this.ctx || !this.canvas) return;
 
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.fillStyle = '#000';
+
+      const audioCtx = audioEngine.getContext();
+      const currentTime = audioCtx ? audioCtx.currentTime : 0;
+      const pulseGate = extreamixEngine.getWebGLUniform('u_pulseGate', currentTime);
+
+      // We simulate a WebGL uniform by modulating the background or global alpha slightly
+      const bgPulse = Math.floor(pulseGate * 20);
+      this.ctx.fillStyle = `rgb(${bgPulse}, ${bgPulse}, ${bgPulse})`;
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
       this.sources.forEach(source => {
         if (!source.active || !this.ctx) return;
 
-        this.ctx.globalAlpha = source.opacity;
+        // Modulate opacity slightly with the pulse gate uniform to simulate a matrix gate effect
+        this.ctx!.globalAlpha = Math.min(1.0, source.opacity + (pulseGate * 0.2));
         
         // Handle advanced blending
         const mode = source.blendMode;

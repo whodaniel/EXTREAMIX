@@ -1,4 +1,6 @@
 import { ChannelState } from '../types';
+import { extreamixEngine } from './extreamixEngine';
+
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -21,6 +23,8 @@ class AudioEngine {
   private current16thNote: number = 0;
   private lookahead: number = 25.0;
   private scheduleAheadTime: number = 0.1;
+  private drawLoopId: number | null = null;
+  private noteEvents: Array<{ step: number, time: number }> = [];
 
   public onStep: (step: number) => void = () => {};
 
@@ -36,6 +40,12 @@ class AudioEngine {
     
     this.masterGain.connect(this.masterAnalyser);
     this.masterAnalyser.connect(this.ctx.destination);
+
+    // Create Matrix Gate Mock Node
+    const matrixGate = this.ctx.createGain();
+    matrixGate.gain.value = 0.0;
+    matrixGate.connect(this.masterGain);
+    extreamixEngine.registerMatrixGate('pulse_gate_1', matrixGate);
   }
 
   public getContext() {
@@ -183,7 +193,9 @@ class AudioEngine {
     
     this.current16thNote = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.05;
+    this.noteEvents = [];
     this.scheduler(bpm, sequence);
+    this.startDrawLoop();
   }
 
   public stopSequencer() {
@@ -191,24 +203,52 @@ class AudioEngine {
       clearTimeout(this.timerID);
       this.timerID = null;
     }
+    if (this.drawLoopId) {
+      cancelAnimationFrame(this.drawLoopId);
+      this.drawLoopId = null;
+    }
+  }
+
+  private startDrawLoop() {
+    if (!this.ctx) return;
+    const draw = () => {
+      const currentTime = this.ctx!.currentTime;
+      while (this.noteEvents.length && this.noteEvents[0].time <= currentTime) {
+        const event = this.noteEvents.shift();
+        if (event) {
+          this.onStep(event.step);
+        }
+      }
+      this.drawLoopId = requestAnimationFrame(draw);
+    };
+    this.drawLoopId = requestAnimationFrame(draw);
   }
 
   private scheduler(bpm: number, sequence: boolean[]) {
     if (!this.ctx) return;
     while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
-      this.scheduleNote(this.current16thNote, this.nextNoteTime, sequence);
+      this.scheduleNote(this.current16thNote, this.nextNoteTime, sequence, bpm);
       this.advanceNote(bpm);
     }
     this.timerID = window.setTimeout(() => this.scheduler(bpm, sequence), this.lookahead);
   }
 
-  private scheduleNote(beatNumber: number, time: number, sequence: boolean[]) {
-    this.onStep(beatNumber);
+  private scheduleNote(beatNumber: number, time: number, sequence: boolean[], bpm: number) {
+    this.noteEvents.push({ step: beatNumber, time });
     if (sequence[beatNumber]) {
       const rootFreq = 55.0;
       const intervals = [0, 12, 7, 0, 3, 12, 7, 10];
       const freq = rootFreq * Math.pow(1.05946, intervals[beatNumber % 8]);
       this.playSynth(time, freq);
+
+      const secondsPerBeat = 60.0 / bpm;
+      const duration = 0.25 * secondsPerBeat; // 16th note length
+
+      // Lookahead scheduling for Extreamix Engine
+      extreamixEngine.setMatrixGateState('pulse_gate_1', 1.0, time);
+      extreamixEngine.setMatrixGateState('pulse_gate_1', 0.0, time + duration * 0.8);
+      extreamixEngine.setWebGLUniform('u_pulseGate', 1.0, time);
+      extreamixEngine.setWebGLUniform('u_pulseGate', 0.0, time + duration * 0.8);
     }
   }
 
