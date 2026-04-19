@@ -1,6 +1,6 @@
 import { ChannelState } from '../types';
 
-class AudioEngine {
+class ExtreamixEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
@@ -31,6 +31,33 @@ class AudioEngine {
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0.9;
     
+    // Node A (lowpass, 200Hz)
+    const nodeA = this.ctx.createBiquadFilter();
+    nodeA.type = 'lowpass';
+    nodeA.frequency.value = 200;
+    const gainA = this.ctx.createGain();
+    gainA.gain.value = 0;
+    nodeA.connect(gainA);
+    gainA.connect(this.masterGain);
+
+    // Node B (bandpass, 1000Hz)
+    const nodeB = this.ctx.createBiquadFilter();
+    nodeB.type = 'bandpass';
+    nodeB.frequency.value = 1000;
+    const gainB = this.ctx.createGain();
+    gainB.gain.value = 0;
+    nodeB.connect(gainB);
+    gainB.connect(this.masterGain);
+
+    // Node C (highpass, 3000Hz)
+    const nodeC = this.ctx.createBiquadFilter();
+    nodeC.type = 'highpass';
+    nodeC.frequency.value = 3000;
+    const gainC = this.ctx.createGain();
+    gainC.gain.value = 0;
+    nodeC.connect(gainC);
+    gainC.connect(this.masterGain);
+
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
     
@@ -219,4 +246,4 @@ class AudioEngine {
   }
 }
 
-export const audioEngine = new AudioEngine();
+export const extreamixEngine = new ExtreamixEngine();
