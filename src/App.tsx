@@ -36,6 +36,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset } from './types';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
+import { LandingPage } from './components/LandingPage';
 
 // --- Shared Components ---
 
@@ -1128,6 +1129,7 @@ const ProjectorView = () => {
 
 export default function App() {
   const isProjector = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('projector') === 'true';
+  const [isLaunched, setIsLaunched] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
   const [channels, setChannels] = useState<ChannelState[]>([
     { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
@@ -1375,6 +1377,10 @@ export default function App() {
 
   if (isProjector) {
     return <ProjectorView />;
+  }
+
+  if (!isLaunched) {
+    return <LandingPage onInitiate={() => setIsLaunched(true)} />;
   }
 
   return (

@@ -40,7 +40,7 @@ body {
   background-color: var(--color-background);
   color: var(--color-on-surface);
   font-family: var(--font-body);
-  @apply antialiased overflow-hidden selection:bg-primary-container selection:text-on-primary-container;
+  @apply antialiased selection:bg-primary-container selection:text-on-primary-container;
 }
 
 .glass-panel {
