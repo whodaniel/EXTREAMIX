@@ -1,3 +1,4 @@
+import { videoEngine } from "./videoEngine";
 import { ChannelState } from '../types';
 
 class ExtreamixEngine {
@@ -5,6 +6,10 @@ class ExtreamixEngine {
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
   private crossoverInput: GainNode | null = null;
+  public gateA: GainNode | null = null;
+  public gateB: GainNode | null = null;
+  public gateC: GainNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
   private channels: Map<string, { 
     gain: GainNode; 
     panner: PannerNode; 
@@ -22,6 +27,10 @@ class ExtreamixEngine {
   private current16thNote: number = 0;
   private lookahead: number = 25.0;
   private scheduleAheadTime: number = 0.1;
+
+  private pulseTimerID: number | null = null;
+  private nextPulseTime: number = 0;
+  private currentPulseStep: number = 0;
 
   public onStep: (step: number) => void = () => {};
 
@@ -42,34 +51,42 @@ class ExtreamixEngine {
     const nodeA = this.ctx.createBiquadFilter();
     nodeA.type = 'lowpass';
     nodeA.frequency.value = 200;
-    const gateA = this.ctx.createGain();
-    gateA.gain.value = 0;
+    this.gateA = this.ctx.createGain();
+    this.gateA.gain.value = 0;
     this.crossoverInput.connect(nodeA);
-    nodeA.connect(gateA);
-    gateA.connect(this.masterGain);
+    nodeA.connect(this.gateA);
+    this.gateA.connect(this.masterGain);
 
     // Node B
     const nodeB = this.ctx.createBiquadFilter();
     nodeB.type = 'bandpass';
     nodeB.frequency.value = 1000;
-    const gateB = this.ctx.createGain();
-    gateB.gain.value = 0;
+    this.gateB = this.ctx.createGain();
+    this.gateB.gain.value = 0;
     this.crossoverInput.connect(nodeB);
-    nodeB.connect(gateB);
-    gateB.connect(this.masterGain);
+    nodeB.connect(this.gateB);
+    this.gateB.connect(this.masterGain);
 
     // Node C
     const nodeC = this.ctx.createBiquadFilter();
     nodeC.type = 'highpass';
     nodeC.frequency.value = 3000;
-    const gateC = this.ctx.createGain();
-    gateC.gain.value = 0;
+    this.gateC = this.ctx.createGain();
+    this.gateC.gain.value = 0;
     this.crossoverInput.connect(nodeC);
-    nodeC.connect(gateC);
-    gateC.connect(this.masterGain);
+    nodeC.connect(this.gateC);
+    this.gateC.connect(this.masterGain);
 
     this.masterGain.connect(this.masterAnalyser);
-    this.masterGain.connect(this.ctx.destination);
+    this.limiter = this.ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -1;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.005;
+    this.limiter.release.value = 0.05;
+
+    this.masterGain.connect(this.limiter);
+    this.limiter.connect(this.ctx.destination);
   }
 
   public getContext() {
@@ -148,6 +165,25 @@ class ExtreamixEngine {
     }
   }
 
+  public applyPatch(patch: any) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    if (patch.gateA !== undefined && this.gateA) {
+      this.gateA.gain.setTargetAtTime(patch.gateA, now, 0.02);
+    }
+    if (patch.gateB !== undefined && this.gateB) {
+      this.gateB.gain.setTargetAtTime(patch.gateB, now, 0.02);
+    }
+    if (patch.gateC !== undefined && this.gateC) {
+      this.gateC.gain.setTargetAtTime(patch.gateC, now, 0.02);
+    }
+
+    if (patch.videoSourceId && patch.videoEffects) {
+       videoEngine.updateSource(patch.videoSourceId, { effects: patch.videoEffects });
+    }
+  }
+
   public routeStreamToChannel(stream: MediaStream, channelId: string, sourceId?: string) {
     if (!this.ctx) return;
     const channel = this.channels.get(channelId);
@@ -209,6 +245,53 @@ class ExtreamixEngine {
 
     osc.start(time);
     osc.stop(time + 0.15);
+  }
+
+  public startPulseSequencer(bpm: number, sequence: boolean[]) {
+    if (!this.ctx) return;
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    this.currentPulseStep = 0;
+    this.nextPulseTime = this.ctx.currentTime + 0.05;
+    this.pulseScheduler(bpm, sequence);
+  }
+
+  public stopPulseSequencer() {
+    if (this.pulseTimerID) {
+      clearTimeout(this.pulseTimerID);
+      this.pulseTimerID = null;
+    }
+  }
+
+  private pulseScheduler(bpm: number, sequence: boolean[]) {
+    if (!this.ctx) return;
+    while (this.nextPulseTime < this.ctx.currentTime + this.scheduleAheadTime) {
+      this.schedulePulse(this.currentPulseStep, this.nextPulseTime, sequence);
+      this.advancePulse(bpm);
+    }
+    this.pulseTimerID = window.setTimeout(() => this.pulseScheduler(bpm, sequence), this.lookahead);
+  }
+
+  private schedulePulse(step: number, time: number, sequence: boolean[]) {
+    if (sequence[step]) {
+      if (this.gateA) {
+        this.gateA.gain.setValueAtTime(1, time);
+        this.gateA.gain.linearRampToValueAtTime(0, time + 0.1);
+      }
+      if (this.gateB) {
+        this.gateB.gain.setValueAtTime(1, time);
+        this.gateB.gain.linearRampToValueAtTime(0, time + 0.1);
+      }
+      if (this.gateC) {
+        this.gateC.gain.setValueAtTime(1, time);
+        this.gateC.gain.linearRampToValueAtTime(0, time + 0.1);
+      }
+    }
+  }
+
+  private advancePulse(bpm: number) {
+    const secondsPerBeat = 60.0 / bpm;
+    this.nextPulseTime += 0.25 * secondsPerBeat;
+    this.currentPulseStep = (this.currentPulseStep + 1) % 16;
   }
 
   public startSequencer(bpm: number, sequence: boolean[]) {
