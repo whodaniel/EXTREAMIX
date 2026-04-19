@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource } from './types';
-import { audioEngine } from './services/audioEngine';
+import { extreamixEngine } from './services/ExtreamixEngine';
 import { videoEngine } from './services/videoEngine';
 
 // --- Shared Components ---
@@ -436,7 +436,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
 
     let animationId: number;
     const draw = () => {
-      const analyser = audioEngine.getMasterAnalyser();
+      const analyser = extreamixEngine.getMasterAnalyser();
       if (!analyser) {
         animationId = requestAnimationFrame(draw);
         return;
@@ -499,7 +499,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
                 <div className="flex bg-surface-container-lowest/50 rounded-xl p-2 items-stretch gap-2">
                    {/* Channel VU Meter */}
                    <VUMeter 
-                    analyser={audioEngine.getChannelAnalyser(channel.id)} 
+                    analyser={extreamixEngine.getChannelAnalyser(channel.id)}
                     orientation="vertical" 
                     className="w-1.5 h-full opacity-80" 
                    />
@@ -640,7 +640,7 @@ const MixerView = ({ channels, updateChannel, transcripts }: { channels: Channel
             <div className="flex items-center gap-4">
                {/* Master Output VU Meter */}
                <div className="flex flex-col items-end gap-1">
-                 <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
+                 <VUMeter analyser={extreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
                  <span className="font-mono text-[7px] text-outline/50 uppercase">MASTER_PEAK</span>
                </div>
                <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" aria-hidden="true" />
@@ -1047,10 +1047,10 @@ export default function App() {
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
 
   useEffect(() => {
-    audioEngine.init();
-    channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+    extreamixEngine.init();
+    channels.forEach(ch => extreamixEngine.createChannel(ch.id, ch));
     
-    audioEngine.onStep = (step) => {
+    extreamixEngine.onStep = (step) => {
       setSequencer(prev => ({ ...prev, currentStep: step }));
     };
   }, []);
@@ -1072,7 +1072,7 @@ export default function App() {
       
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
-        audioEngine.routeStreamToChannel(stream, 'ch-1');
+        extreamixEngine.routeStreamToChannel(stream, 'ch-1');
         // Update transcription to show something happened
         setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
       }
@@ -1083,10 +1083,10 @@ export default function App() {
 
   const handlePlay = () => {
     if (sequencer.isPlaying) {
-      audioEngine.stopSequencer();
+      extreamixEngine.stopSequencer();
       setSequencer(prev => ({ ...prev, isPlaying: false, currentStep: -1 }));
     } else {
-      audioEngine.startSequencer(sequencer.bpm, sequencer.steps);
+      extreamixEngine.startSequencer(sequencer.bpm, sequencer.steps);
       setSequencer(prev => ({ ...prev, isPlaying: true }));
     }
   };
@@ -1106,7 +1106,7 @@ export default function App() {
       
       // If audio exists, route it too
       if (source.audioChannelId) {
-        audioEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
+        extreamixEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
       }
     } catch (err) {
       console.error('Failed to add video source:', err);
@@ -1119,7 +1119,7 @@ export default function App() {
 
     if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
       if (update.audioChannelId) {
-        audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
+        extreamixEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
       }
     }
 
@@ -1131,7 +1131,7 @@ export default function App() {
     setChannels(prev => prev.map(ch => {
       if (ch.id === id) {
         const next = { ...ch, ...update };
-        audioEngine.updateChannel(id, next);
+        extreamixEngine.updateChannel(id, next);
         return next;
       }
       return ch;
@@ -1299,7 +1299,7 @@ export default function App() {
 
         <div className="flex items-center gap-6 md:gap-12">
            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5">
-              <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
+              <VUMeter analyser={extreamixEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
            </div>
            
            <div className="flex items-center gap-2">

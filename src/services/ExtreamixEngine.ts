@@ -1,9 +1,10 @@
 import { ChannelState } from '../types';
 
-class AudioEngine {
+class ExtreamixEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
+  private masterLimiter: DynamicsCompressorNode | null = null;
   private channels: Map<string, { 
     gain: GainNode; 
     panner: PannerNode; 
@@ -34,8 +35,17 @@ class AudioEngine {
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
     
+    this.masterLimiter = this.ctx.createDynamicsCompressor();
+    // Configure as brickwall limiter
+    this.masterLimiter.ratio.value = 20;
+    this.masterLimiter.attack.value = 0.001;
+    this.masterLimiter.knee.value = 0;
+    this.masterLimiter.threshold.value = -0.5;
+    this.masterLimiter.release.value = 0.1;
+
     this.masterGain.connect(this.masterAnalyser);
-    this.masterAnalyser.connect(this.ctx.destination);
+    this.masterAnalyser.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.ctx.destination);
   }
 
   public getContext() {
@@ -219,4 +229,4 @@ class AudioEngine {
   }
 }
 
-export const audioEngine = new AudioEngine();
+export const extreamixEngine = new ExtreamixEngine();
