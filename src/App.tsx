@@ -99,11 +99,19 @@ const NavItem = ({
 
 const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSource[], onUpdate: (id: string, update: Partial<VideoSource>) => void, onAdd: () => void, channels: ChannelState[] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (canvasRef.current) {
       videoEngine.init(canvasRef.current);
+      try {
+        // @ts-ignore
+        window.extreamixMainStream = canvasRef.current.captureStream(30);
+      } catch(e) {
+        console.warn("Could not capture stream from canvas", e);
+      }
     }
 
     const checkScreens = async () => {
@@ -119,7 +127,16 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
     };
     checkScreens();
 
-    return () => videoEngine.stopRender();
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      videoEngine.stopRender();
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
   const handleLaunchProjector = (screen?: any) => {
@@ -136,10 +153,16 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
   };
 
   const handleFullscreen = () => {
-    if (canvasRef.current) {
-      canvasRef.current.requestFullscreen().catch(err => {
-        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
-      });
+    if (!document.fullscreenElement) {
+      if (containerRef.current) {
+        containerRef.current.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
     }
   };
 
@@ -147,6 +170,7 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
     <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto xl:overflow-hidden min-h-0 p-2 md:p-4 custom-scrollbar lg:pb-20 xl:pb-0">
       {/* Main Canvas Monitor */}
       <div 
+        ref={containerRef}
         className="flex-[3] min-h-[300px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
       >
         <canvas 
@@ -1108,18 +1132,31 @@ const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], on
 };
 
 const ProjectorView = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (canvasRef.current) {
-      videoEngine.init(canvasRef.current);
-    }
-    return () => videoEngine.stopRender();
+    const tryConnect = () => {
+      try {
+        // @ts-ignore
+        const mainStream = window.opener?.window?.extreamixMainStream;
+        if (mainStream && videoRef.current) {
+          if (videoRef.current.srcObject !== mainStream) {
+            videoRef.current.srcObject = mainStream;
+            videoRef.current.play().catch(console.error);
+          }
+        }
+      } catch (e) {
+        console.warn("Unable to connect to mainline hub stream.", e);
+      }
+      setTimeout(tryConnect, 1000);
+    };
+    
+    tryConnect();
   }, []);
 
   return (
     <div className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden">
-      <canvas ref={canvasRef} className="w-full h-full object-contain" width={1920} height={1080} />
+      <video ref={videoRef} className="w-full h-full object-contain" autoPlay muted playsInline />
       <div className="absolute top-4 left-4 font-headline text-[8px] text-primary/30 uppercase tracking-[0.4em]">EXTREAMIX_REMOTE_NODE</div>
     </div>
   );
@@ -1129,14 +1166,28 @@ const ProjectorView = () => {
 
 export default function App() {
   const isProjector = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('projector') === 'true';
-  const [isLaunched, setIsLaunched] = useState(false);
+  const [isLaunched, setIsLaunched] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('extreamix_isLaunched') === 'true';
+    }
+    return false;
+  });
+  
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
-  const [channels, setChannels] = useState<ChannelState[]>([
-    { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-    { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-    { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-    { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-  ]);
+  
+  const [channels, setChannels] = useState<ChannelState[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_channels');
+      if (saved) return JSON.parse(saved);
+    }
+    return [
+      { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
+      { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
+      { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
+      { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
+    ];
+  });
   const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -1195,11 +1246,17 @@ export default function App() {
     }
   };
 
-  const [sequencer, setSequencer] = useState<SequencerState>({
-    steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true],
-    bpm: 120,
-    currentStep: -1,
-    isPlaying: false
+  const [sequencer, setSequencer] = useState<SequencerState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_sequencer');
+      if (saved) return JSON.parse(saved);
+    }
+    return {
+      steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true],
+      bpm: 120,
+      currentStep: -1,
+      isPlaying: false
+    };
   });
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
   const [routingSources, setRoutingSources] = useState<RoutingSource[]>([
@@ -1223,10 +1280,16 @@ export default function App() {
   ]);
 
   // --- EXTREAMIX Overhaul States ---
-  const [crossoverGates, setCrossoverGates] = useState({
-    low200: true,
-    mid1000: false,
-    high3000: true
+  const [crossoverGates, setCrossoverGates] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_crossoverGates');
+      if (saved) return JSON.parse(saved);
+    }
+    return {
+      low200: true,
+      mid1000: false,
+      high3000: true
+    };
   });
 
   const [shaderUniforms, setShaderUniforms] = useState({
@@ -1234,13 +1297,19 @@ export default function App() {
     pixelation: 0.1
   });
 
-  const [matrixMappings, setMatrixMappings] = useState<MatrixMapping[]>([
-    { id: 'm1', target: 'GATE_LOW_200', midiCC: 14, value: 1 },
-    { id: 'm2', target: 'GATE_MID_1000', midiCC: 15, value: 0 },
-    { id: 'm3', target: 'GATE_HIGH_3000', midiCC: 16, value: 1 },
-    { id: 'm4', target: 'SHADER_RGB_SPLIT', midiCC: 74, value: 0.5 },
-    { id: 'm5', target: 'SHADER_PIXELATION', midiCC: 75, value: 0.1 }
-  ]);
+  const [matrixMappings, setMatrixMappings] = useState<MatrixMapping[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_matrixMappings');
+      if (saved) return JSON.parse(saved);
+    }
+    return [
+      { id: 'm1', target: 'GATE_LOW_200', midiCC: 14, value: 1 },
+      { id: 'm2', target: 'GATE_MID_1000', midiCC: 15, value: 0 },
+      { id: 'm3', target: 'GATE_HIGH_3000', midiCC: 16, value: 1 },
+      { id: 'm4', target: 'SHADER_RGB_SPLIT', midiCC: 74, value: 0.5 },
+      { id: 'm5', target: 'SHADER_PIXELATION', midiCC: 75, value: 0.1 }
+    ];
+  });
 
   const [registryPresets, setRegistryPresets] = useState([
     { id: 'p1', name: 'HYPER_DRIVE_01', description: 'Aggressive compression and extreme RGB splitting.', tags: ['AGGR', 'SYNC'], lastModified: '2026-04-18', patchData: '{"hue": "shift"}' },
@@ -1249,6 +1318,36 @@ export default function App() {
 
   // Master Limiter state for LED feedback in Console
   const [masterLimiterActive, setMasterLimiterActive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_isLaunched', isLaunched.toString());
+    }
+  }, [isLaunched]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_channels', JSON.stringify(channels));
+    }
+  }, [channels]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_sequencer', JSON.stringify(sequencer));
+    }
+  }, [sequencer]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_crossoverGates', JSON.stringify(crossoverGates));
+    }
+  }, [crossoverGates]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_matrixMappings', JSON.stringify(matrixMappings));
+    }
+  }, [matrixMappings]);
 
 
   useEffect(() => {
@@ -1462,7 +1561,7 @@ export default function App() {
 
           <div className="h-8 w-[1px] bg-white/10 mx-1 md:mx-2 hidden sm:block" />
           <div className="flex items-center gap-1">
-            <IconButton icon={Settings} label="General Settings" className="scale-90 md:scale-100" />
+            <IconButton icon={Settings} label="General Settings" className="scale-90 md:scale-100" onClick={() => setIsSettingsOpen(true)} />
             <div className="w-8 h-8 rounded-full border border-primary/30 ml-2 md:ml-4 overflow-hidden relative flex-shrink-0">
                <img src="https://picsum.photos/seed/sonicuser/64/64" alt="User Profile Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
@@ -1470,7 +1569,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative min-h-0">
         {/* Navigation - Bottom bar on mobile, Sidebar on desktop */}
         <nav className="fixed bottom-0 left-0 right-0 h-16 md:h-auto bg-surface-container-high/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-around z-40 transition-all md:relative md:w-20 lg:w-24 md:flex-col md:border-t-0 md:border-r md:justify-start md:py-8 lg:p-0">
            <div className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4">
@@ -1486,15 +1585,70 @@ export default function App() {
 
           <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full">
             <button className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all">ADD_TRK</button>
-            <NavItem icon={Settings} label="Help" active={false} onClick={() => {}} />
+            <NavItem icon={Settings} label="Config" active={isSettingsOpen} onClick={() => setIsSettingsOpen(true)} />
           </div>
         </nav>
 
         {/* Workspace */}
-        <main className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar min-h-0">
           <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
             <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
           </div>
+
+          <AnimatePresence>
+            {isSettingsOpen && (
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.95, y: 20 }}
+                  className="w-full max-w-md bg-surface border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl relative"
+                >
+                  <button 
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="absolute top-4 right-4 text-outline hover:text-white"
+                  >
+                     ✕
+                  </button>
+                  <h2 className="font-headline text-xl text-primary font-black uppercase tracking-widest mb-6 border-b border-white/10 pb-4">System configuration</h2>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Memory Allocation</h3>
+                      <button 
+                        onClick={() => {
+                          localStorage.clear();
+                          window.location.reload();
+                        }}
+                        className="w-full py-3 px-4 bg-error/10 hover:bg-error/20 border border-error/30 text-error rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all"
+                      >
+                         PURGE_LOCAL_CACHE // FACTORY_RESET
+                      </button>
+                      <p className="mt-2 text-[10px] font-mono text-outline/50 uppercase">Clears all saved channels, sequencer patterns, and routing matrix configs.</p>
+                    </div>
+
+                    <div>
+                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Session Interface</h3>
+                      <button 
+                         onClick={() => {
+                           localStorage.removeItem('extreamix_isLaunched');
+                           window.location.reload();
+                         }}
+                         className="w-full py-3 px-4 bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all"
+                      >
+                         RETURN_TO_ACQUISITION_TERMINAL
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           
           <AnimatePresence mode="wait">
             <motion.div
@@ -1503,7 +1657,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
-              className="flex-1 flex flex-col z-10"
+              className="flex-1 flex flex-col z-10 min-h-0"
             >
               {currentView === 'mixer' && (
                 <ConsoleView 
