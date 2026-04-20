@@ -5,12 +5,106 @@ class VideoEngine {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private animationId: number | null = null;
+  
+  private isDragging = false;
+  private draggedSourceId: string | null = null;
+  private lastMouse: { x: number, y: number } = { x: 0, y: 0 };
+  public onUpdateSource?: (id: string, update: Partial<VideoSource>) => void;
 
   public init(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.startRender();
+    this.attachEvents();
   }
+
+  private attachEvents() {
+    if (!this.canvas) return;
+    this.canvas.addEventListener('mousedown', this.handleStart);
+    window.addEventListener('mousemove', this.handleMove);
+    window.addEventListener('mouseup', this.handleEnd);
+    
+    this.canvas.addEventListener('touchstart', this.handleStart, { passive: false });
+    window.addEventListener('touchmove', this.handleMove, { passive: false });
+    window.addEventListener('touchend', this.handleEnd);
+  }
+
+  private getEventPoint(e: MouseEvent | TouchEvent) {
+    if (!this.canvas) return { x: 0, y: 0 };
+    const rect = this.canvas.getBoundingClientRect();
+    let clientX, clientY;
+    if ('touches' in e && window.TouchEvent && e instanceof TouchEvent) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = (e as MouseEvent).clientX;
+      clientY = (e as MouseEvent).clientY;
+    }
+    const x = (clientX - rect.left) * (this.canvas.width / rect.width);
+    const y = (clientY - rect.top) * (this.canvas.height / rect.height);
+    return { x, y };
+  }
+
+  private getSourceAtPoint(x: number, y: number): string | null {
+    if (!this.canvas) return null;
+    const sourcesArr = Array.from(this.sources.values()).reverse();
+    for (const source of sourcesArr) {
+      if (!source.active) continue;
+      const vw = source.videoElement.videoWidth;
+      const vh = source.videoElement.videoHeight;
+      if (vw === 0 || vh === 0) continue;
+      
+      const aspect = vw / vh;
+      let dw = this.canvas.width * source.scale;
+      let dh = dw / aspect;
+      
+      const dx = (this.canvas.width - dw) / 2 + (source.position.x * this.canvas.width / 2);
+      const dy = (this.canvas.height - dh) / 2 + (source.position.y * this.canvas.height / 2);
+      
+      if (x >= dx && x <= dx + dw && y >= dy && y <= dy + dh) {
+        return source.id;
+      }
+    }
+    return null;
+  }
+
+  private handleStart = (e: MouseEvent | TouchEvent) => {
+    const pt = this.getEventPoint(e);
+    const sourceId = this.getSourceAtPoint(pt.x, pt.y);
+    if (sourceId) {
+      this.isDragging = true;
+      this.draggedSourceId = sourceId;
+      this.lastMouse = pt;
+      if (e.cancelable) e.preventDefault();
+    }
+  };
+
+  private handleMove = (e: MouseEvent | TouchEvent) => {
+    if (!this.isDragging || !this.draggedSourceId || !this.canvas) return;
+    if (e.cancelable) e.preventDefault();
+    
+    const pt = this.getEventPoint(e);
+    const deltaX = pt.x - this.lastMouse.x;
+    const deltaY = pt.y - this.lastMouse.y;
+    
+    const source = this.sources.get(this.draggedSourceId);
+    if (source) {
+      source.position.x += deltaX / (this.canvas.width / 2);
+      source.position.y += deltaY / (this.canvas.height / 2);
+    }
+    this.lastMouse = pt;
+  };
+
+  private handleEnd = () => {
+    if (this.isDragging && this.draggedSourceId && this.onUpdateSource) {
+      const source = this.sources.get(this.draggedSourceId);
+      if (source) {
+         this.onUpdateSource(this.draggedSourceId, { position: { ...source.position } });
+      }
+    }
+    this.isDragging = false;
+    this.draggedSourceId = null;
+  };
 
   public addSource(stream: MediaStream, name: string): VideoSource {
     const id = `v-${Date.now()}`;
@@ -68,7 +162,6 @@ class VideoEngine {
 
         this.ctx.globalAlpha = source.opacity;
         
-        // Handle advanced blending
         const mode = source.blendMode;
         if (mode === 'additive') this.ctx.globalCompositeOperation = 'lighter';
         else if (mode === 'subtractive') this.ctx.globalCompositeOperation = 'difference';
@@ -82,7 +175,6 @@ class VideoEngine {
             let dw = this.canvas!.width * source.scale;
             let dh = dw / aspect;
             
-            // Apply repositioning (normalized coordinates -1 to 1)
             const dx = (this.canvas!.width - dw) / 2 + (source.position.x * this.canvas!.width / 2);
             const dy = (this.canvas!.height - dh) / 2 + (source.position.y * this.canvas!.height / 2);
             
@@ -99,6 +191,15 @@ class VideoEngine {
   public stopRender() {
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
+    }
+    
+    if (this.canvas) {
+      this.canvas.removeEventListener('mousedown', this.handleStart);
+      window.removeEventListener('mousemove', this.handleMove);
+      window.removeEventListener('mouseup', this.handleEnd);
+      this.canvas.removeEventListener('touchstart', this.handleStart);
+      window.removeEventListener('touchmove', this.handleMove);
+      window.removeEventListener('touchend', this.handleEnd);
     }
   }
 }

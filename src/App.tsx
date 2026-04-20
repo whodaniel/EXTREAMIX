@@ -1423,6 +1423,15 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    videoEngine.onUpdateSource = (id, update) => {
+       setVideoSources(prev => prev.map(s => s.id === id ? { ...s, ...update } : s));
+    };
+    return () => {
+      videoEngine.onUpdateSource = undefined;
+    };
+  }, []);
+
   const handleAddVideoSource = async () => {
     try {
       let captureConfig: any = {
@@ -1442,16 +1451,28 @@ export default function App() {
 
       const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
       
-      const defaultChannelId = 'ch-1';
       const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
-      source.audioChannelId = stream.getAudioTracks().length > 0 ? defaultChannelId : undefined;
+      
+      const hasAudio = stream.getAudioTracks().length > 0;
+      if (hasAudio) {
+        const newChannelId = `ch-vid-${Date.now()}`;
+        const newChannel: ChannelState = {
+          id: newChannelId,
+          name: `Feed ${videoSources.length + 1}`,
+          volume: 0.8,
+          pan: 0,
+          depth: 0,
+          mute: false,
+          solo: false,
+          eq: { low: 0, mid: 0, high: 0 }
+        };
+        setChannels(prev => [...prev, newChannel]);
+        audioEngine.createChannel(newChannelId, newChannel);
+        source.audioChannelId = newChannelId;
+        audioEngine.routeStreamToChannel(stream, newChannelId, source.id);
+      }
       
       setVideoSources(prev => [...prev, source]);
-      
-      // If audio exists, route it too
-      if (source.audioChannelId) {
-        audioEngine.routeStreamToChannel(stream, source.audioChannelId, source.id);
-      }
     } catch (err) {
       console.error('Failed to add video source:', err);
     }
