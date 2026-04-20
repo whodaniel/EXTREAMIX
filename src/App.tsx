@@ -1377,15 +1377,27 @@ export default function App() {
 
   const handleRouteExternalTab = async () => {
     try {
-      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      let captureConfig: any = {
         video: true,
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false
         }
-      });
+      };
+      
+      // @ts-ignore
+      let controller;
+      // @ts-ignore
+      if (window.CaptureController) {
+        // @ts-ignore
+        controller = new CaptureController();
+        controller.setFocusBehavior("no-focus-change");
+        captureConfig.controller = controller;
+      }
+
+      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
       
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) videoTrack.stop(); // We only want audio
@@ -1413,10 +1425,22 @@ export default function App() {
 
   const handleAddVideoSource = async () => {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      let captureConfig: any = {
         video: true,
         audio: true
-      });
+      };
+      
+      // @ts-ignore
+      let controller;
+      // @ts-ignore
+      if (window.CaptureController) {
+        // @ts-ignore
+        controller = new CaptureController();
+        controller.setFocusBehavior("no-focus-change");
+        captureConfig.controller = controller;
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
       
       const defaultChannelId = 'ch-1';
       const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
