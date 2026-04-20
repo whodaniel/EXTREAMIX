@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { 
   Play, 
   Square, 
@@ -108,18 +107,16 @@ const ImagingView = ({
   onAdd, 
   channels,
   activeSourceId,
-  sequencer,
-  mainCanvasRef
+  sequencer
 }: { 
   sources: VideoSource[], 
   onUpdate: (id: string, update: Partial<VideoSource>) => void, 
   onAdd: () => void, 
   channels: ChannelState[],
   activeSourceId: string | null,
-  sequencer: SequencerState,
-  mainCanvasRef: React.RefObject<HTMLCanvasElement | null>
+  sequencer: SequencerState
 }) => {
-  const portalRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
@@ -138,6 +135,16 @@ const ImagingView = ({
   }, [activeSourceId]);
 
   useEffect(() => {
+    if (canvasRef.current) {
+      videoEngine.init(canvasRef.current);
+      try {
+        // @ts-ignore
+        window.extreamixMainStream = canvasRef.current.captureStream(30);
+      } catch(e) {
+        console.warn("Could not capture stream from canvas", e);
+      }
+    }
+
     const checkScreens = async () => {
       if ('getScreenDetails' in window) {
         try {
@@ -196,10 +203,13 @@ const ImagingView = ({
         ref={containerRef}
         className="flex-[3] min-h-[300px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
       >
-        <div ref={portalRef} className="w-full h-full">
-           {/* Global Canvas will be portalled here when this view is active */}
-           {portalRef.current && mainCanvasRef.current && createPortal(mainCanvasRef.current, portalRef.current)}
-        </div>
+        <canvas 
+          ref={canvasRef} 
+          className="w-full h-full object-contain" 
+          width={1920} height={1080} 
+          role="img" 
+          aria-label="Imaging Module WebGL Canvas"
+        />
         <div className="absolute top-4 left-4 md:top-6 md:left-6 flex flex-col gap-1 pointer-events-none">
           <div className="font-headline text-[9px] md:text-[10px] text-tertiary bg-black/60 px-3 py-1 rounded-full border border-tertiary/20 tracking-widest uppercase backdrop-blur-md">
             IMAGING_OUT // WEBGL2
@@ -1478,7 +1488,6 @@ export default function App() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
-  const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const [channels, setChannels] = useState<ChannelState[]>(() => {
     const defaultFX: FXState = {
@@ -1693,20 +1702,6 @@ export default function App() {
     audioEngine.setMasterVolume(sequencer.masterVolume);
     audioEngine.setTempoDriftThreshold(sequencer.tempoDriftThreshold);
   }, [sequencer.masterVolume, sequencer.tempoDriftThreshold]);
-
-  // Global Engine / Stream Init
-  useEffect(() => {
-    if (mainCanvasRef.current) {
-      videoEngine.init(mainCanvasRef.current);
-      try {
-        // @ts-ignore
-        window.extreamixMainStream = mainCanvasRef.current.captureStream(30);
-      } catch (e) {
-        console.warn("Capture stream failed:", e);
-      }
-    }
-  }, []);
-
 
 
   useEffect(() => {
@@ -2122,13 +2117,24 @@ export default function App() {
           
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentView}
+              key={currentView === 'vision' ? 'vision' : 'other'}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col z-10 min-h-0"
             >
+              <div className={currentView === 'vision' ? 'flex-1 flex flex-col' : 'hidden'}>
+                <ImagingView 
+                  sources={videoSources} 
+                  onUpdate={updateVideoSource} 
+                  onAdd={handleAddVideoSource} 
+                  channels={channels} 
+                  activeSourceId={activeVideoSourceId}
+                  sequencer={sequencer}
+                />
+              </div>
+
               {currentView === 'mixer' && (
                 <ConsoleView 
                   channels={channels} 
@@ -2141,16 +2147,6 @@ export default function App() {
                   isTranscribing={isTranscribing}
                   sequencer={sequencer}
                   setSequencer={setSequencer}
-                />
-              )}
-              {currentView === 'vision' && (
-                <ImagingView 
-                  sources={videoSources} 
-                  onUpdate={updateVideoSource} 
-                  onAdd={handleAddVideoSource} 
-                  channels={channels} 
-                  activeSourceId={activeVideoSourceId}
-                  sequencer={sequencer}
                 />
               )}
               {currentView === 'sequencer' && (
@@ -2213,11 +2209,6 @@ export default function App() {
            </div>
         </div>
       </footer>
-
-      {/* Persistence Layer: Persistent hidden canvas to keep video engine and captureStream active across views */}
-      <div className={`fixed bottom-0 right-0 w-[320px] h-[180px] z-[-1] pointer-events-none opacity-0 invisible ${currentView === 'vision' ? '' : ''}`}>
-         <canvas ref={mainCanvasRef} className="w-full h-full object-contain" />
-      </div>
     </div>
   );
 }
