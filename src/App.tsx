@@ -1021,7 +1021,7 @@ const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], on
   const activePreset = presets.find(p => p.id === selectedPreset);
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row overflow-y-auto xl:overflow-hidden min-h-0 bg-surface">
+    <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 bg-surface">
       <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar">
         <div className="mb-6 md:mb-10 flex flex-col sm:flex-row gap-4 items-start sm:items-center sticky top-0 bg-surface/80 backdrop-blur-xl z-20 pb-4">
            <div className="flex-1 w-full bg-surface-container-low rounded-xl border border-white/5 flex items-center px-4 py-3 focus-within:ring-2 focus-within:ring-primary/50 transition-all group max-w-xl">
@@ -1491,7 +1491,7 @@ export default function App() {
         </nav>
 
         {/* Workspace */}
-        <main className="flex-1 overflow-y-auto flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar">
           <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
             <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
           </div>

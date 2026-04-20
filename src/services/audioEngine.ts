@@ -1,28 +1,26 @@
 import { ChannelState } from '../types';
-import { extreamixMatrix } from './ExtreamixMatrix';
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
-  private channels: Map<string, {
-    gain: GainNode;
-    panner: PannerNode;
+  private channels: Map<string, { 
+    gain: GainNode; 
+    panner: PannerNode; 
     analyser: AnalyserNode;
     eqLow: BiquadFilterNode;
     eqMid: BiquadFilterNode;
     eqHigh: BiquadFilterNode;
+    spectralCrossover?: BiquadFilterNode;
   }> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
-
-  // Scheduler properties for PULSE Sequencer
+  
+  // Sequencer state
   private timerID: number | null = null;
   private nextNoteTime: number = 0;
   private current16thNote: number = 0;
   private lookahead: number = 25.0;
   private scheduleAheadTime: number = 0.1;
-  private drawLoopId: number | null = null;
-  private noteEvents: Array<{ step: number; time: number }> = [];
 
   public onStep: (step: number) => void = () => {};
 
@@ -38,12 +36,6 @@ class AudioEngine {
     
     this.masterGain.connect(this.masterAnalyser);
     this.masterAnalyser.connect(this.ctx.destination);
-
-    // Create Matrix Gate Mock Node
-    const matrixGate = this.ctx.createGain();
-    matrixGate.gain.value = 0.0;
-    matrixGate.connect(this.masterGain);
-    extreamixMatrix.registerMatrixGate('pulse_gate_1', matrixGate);
   }
 
   public getContext() {
@@ -84,13 +76,14 @@ class AudioEngine {
     panner.refDistance = 1;
     panner.maxDistance = 10000;
     panner.rolloffFactor = 1;
-    panner.positionX.value = initialState.pan;
+    panner.positionX.value = initialState.pan; // left-right
     panner.positionY.value = 0;
-    panner.positionZ.value = initialState.depth || 0;
+    panner.positionZ.value = initialState.depth || 0; // front-back (depth)
     
     const analyser = this.ctx.createAnalyser();
     analyser.fftSize = 64;
     
+    // Connect Chain: Source -> eqLow -> eqMid -> eqHigh -> Gain -> Panner -> Analyser -> Master
     eqLow.connect(eqMid);
     eqMid.connect(eqHigh);
     eqHigh.connect(gain);
@@ -126,6 +119,7 @@ class AudioEngine {
     const channel = this.channels.get(channelId);
     if (!channel) return;
     
+    // If we have a sourceId, we can manage the re-routing more effectively
     if (sourceId) {
       const existing = this.activeStreamSources.get(sourceId);
       if (existing) {
@@ -143,6 +137,8 @@ class AudioEngine {
       if (sourceId) {
         this.activeStreamSources.set(sourceId, source);
       }
+      
+      console.log(`Routed stream to channel ${channelId}`);
       return source;
     } catch (err) {
       console.error('Failed to route stream:', err);
@@ -187,9 +183,7 @@ class AudioEngine {
     
     this.current16thNote = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.05;
-    this.noteEvents = [];
     this.scheduler(bpm, sequence);
-    this.startDrawLoop();
   }
 
   public stopSequencer() {
@@ -197,52 +191,24 @@ class AudioEngine {
       clearTimeout(this.timerID);
       this.timerID = null;
     }
-    if (this.drawLoopId) {
-      cancelAnimationFrame(this.drawLoopId);
-      this.drawLoopId = null;
-    }
-  }
-
-  private startDrawLoop() {
-    if (!this.ctx) return;
-    const draw = () => {
-      const currentTime = this.ctx!.currentTime;
-      while (this.noteEvents.length && this.noteEvents[0].time <= currentTime) {
-        const event = this.noteEvents.shift();
-        if (event) {
-          this.onStep(event.step);
-        }
-      }
-      this.drawLoopId = requestAnimationFrame(draw);
-    };
-    this.drawLoopId = requestAnimationFrame(draw);
   }
 
   private scheduler(bpm: number, sequence: boolean[]) {
     if (!this.ctx) return;
     while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
-      this.scheduleNote(this.current16thNote, this.nextNoteTime, sequence, bpm);
+      this.scheduleNote(this.current16thNote, this.nextNoteTime, sequence);
       this.advanceNote(bpm);
     }
     this.timerID = window.setTimeout(() => this.scheduler(bpm, sequence), this.lookahead);
   }
 
-  private scheduleNote(beatNumber: number, time: number, sequence: boolean[], bpm: number) {
-    this.noteEvents.push({ step: beatNumber, time });
+  private scheduleNote(beatNumber: number, time: number, sequence: boolean[]) {
+    this.onStep(beatNumber);
     if (sequence[beatNumber]) {
       const rootFreq = 55.0;
       const intervals = [0, 12, 7, 0, 3, 12, 7, 10];
       const freq = rootFreq * Math.pow(1.05946, intervals[beatNumber % 8]);
       this.playSynth(time, freq);
-
-      const secondsPerBeat = 60.0 / bpm;
-      const duration = 0.25 * secondsPerBeat;
-
-      // Lookahead scheduling for Extreamix Core
-      extreamixMatrix.setMatrixGateState('pulse_gate_1', 1.0, time);
-      extreamixMatrix.setMatrixGateState('pulse_gate_1', 0.0, time + duration * 0.8);
-      extreamixMatrix.setWebGLUniform('u_pulseGate', 1.0, time);
-      extreamixMatrix.setWebGLUniform('u_pulseGate', 0.0, time + duration * 0.8);
     }
   }
 

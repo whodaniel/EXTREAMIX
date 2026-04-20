@@ -15,7 +15,6 @@ export interface VideoSource {
   active: boolean;
   position: Point;
   scale: number;
-  effects?: any;
   audioChannelId?: string;
 }
 
