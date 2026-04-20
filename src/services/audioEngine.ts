@@ -1,4 +1,4 @@
-import { ChannelState, PulseTrack } from '../types';
+import { ChannelState, PulseTrack, FXState } from '../types';
 
 interface ChannelNodes { 
   gain: GainNode; 
@@ -25,11 +25,29 @@ interface ChannelNodes {
   osc?: OscillatorNode;
 }
 
+interface MasterFXNodes {
+  delay: DelayNode;
+  delayGain: GainNode;
+  reverb: ConvolverNode;
+  reverbGain: GainNode;
+  chorus: DelayNode;
+  chorusLFO: OscillatorNode;
+  chorusGain: GainNode;
+  phaser: BiquadFilterNode[];
+  phaserLFO: OscillatorNode;
+  phaserGain: GainNode;
+  lowPass: BiquadFilterNode;
+  midPass: BiquadFilterNode;
+  highPass: BiquadFilterNode;
+  masterFilter: BiquadFilterNode; // For master sweeps
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterLimiter: DynamicsCompressorNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
+  private masterFX: MasterFXNodes | null = null;
   private channels: Map<string, ChannelNodes> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   
@@ -61,13 +79,123 @@ class AudioEngine {
     
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0.9;
+
+    // Master FX
+    const m_delay = this.ctx.createDelay(2.0);
+    const m_delayGain = this.ctx.createGain();
+    const m_delayFB = this.ctx.createGain();
+    m_delayFB.gain.value = 0.4;
+    m_delay.connect(m_delayFB);
+    m_delayFB.connect(m_delay);
+
+    const m_chorus = this.ctx.createDelay(0.1);
+    const m_chorusLFO = this.ctx.createOscillator();
+    const m_chorusLFOGain = this.ctx.createGain();
+    const m_chorusGain = this.ctx.createGain();
+    m_chorusLFO.frequency.value = 0.3;
+    m_chorusLFOGain.gain.value = 0.002;
+    m_chorusLFO.connect(m_chorusLFOGain);
+    m_chorusLFOGain.connect(m_chorus.delayTime);
+    m_chorusLFO.start();
+
+    const m_phaserLFO = this.ctx.createOscillator();
+    const m_phaserLFOGain = this.ctx.createGain();
+    const m_phaserGain = this.ctx.createGain();
+    const m_phaserStages: BiquadFilterNode[] = [];
+    m_phaserLFO.frequency.value = 0.2;
+    m_phaserLFOGain.gain.value = 500;
+    m_phaserLFO.connect(m_phaserLFOGain);
+    for(let i=0; i<6; i++) {
+      const stage = this.ctx.createBiquadFilter();
+      stage.type = 'allpass';
+      stage.frequency.value = 1000;
+      m_phaserLFOGain.connect(stage.frequency);
+      m_phaserStages.push(stage);
+    }
+    m_phaserLFO.start();
+
+    const m_reverb = this.ctx.createConvolver();
+    const m_reverbGain = this.ctx.createGain();
+    const m_sampleRate = this.ctx.sampleRate;
+    const m_length = m_sampleRate * 3;
+    const m_impulse = this.ctx.createBuffer(2, m_length, m_sampleRate);
+    for(let i=0; i<m_length; i++) {
+      const n = (m_length - i) / m_length;
+      m_impulse.getChannelData(0)[i] = (Math.random() * 2 - 1) * Math.pow(n, 3);
+      m_impulse.getChannelData(1)[i] = (Math.random() * 2 - 1) * Math.pow(n, 3);
+    }
+    m_reverb.buffer = m_impulse;
+
+    const m_lowPass = this.ctx.createBiquadFilter();
+    m_lowPass.type = 'lowpass';
+    m_lowPass.frequency.value = 200;
     
+    const m_midPassLow = this.ctx.createBiquadFilter();
+    m_midPassLow.type = 'highpass';
+    m_midPassLow.frequency.value = 200;
+    const m_midPassHigh = this.ctx.createBiquadFilter();
+    m_midPassHigh.type = 'lowpass';
+    m_midPassHigh.frequency.value = 3000;
+    
+    const m_highPass = this.ctx.createBiquadFilter();
+    m_highPass.type = 'highpass';
+    m_highPass.frequency.value = 3000;
+
+    const m_masterFilter = this.ctx.createBiquadFilter();
+    m_masterFilter.type = 'lowpass';
+    m_masterFilter.frequency.value = 20000;
+
+    this.masterFX = {
+      delay: m_delay, delayGain: m_delayGain,
+      reverb: m_reverb, reverbGain: m_reverbGain,
+      chorus: m_chorus, chorusLFO: m_chorusLFO, chorusGain: m_chorusGain,
+      phaser: m_phaserStages, phaserLFO: m_phaserLFO, phaserGain: m_phaserGain,
+      lowPass: m_lowPass,
+      midPass: m_midPassHigh, // placeholder for mid chain
+      highPass: m_highPass,
+      masterFilter: m_masterFilter
+    };
+
+    // Connections: MasterGain -> (Parallel Master FX) -> MasterFilter -> (Split Bands) -> Selector -> MasterLimiter
+    // For simplicity, we'll route into a sum, then split
+    const masterSum = this.ctx.createGain();
+    this.masterGain.connect(masterSum);
+    m_delayGain.connect(masterSum);
+    m_reverbGain.connect(masterSum);
+    m_phaserGain.connect(masterSum);
+    m_chorusGain.connect(masterSum);
+
+    masterSum.connect(m_masterFilter);
+
+    // Split for Crossover
+    const m_lowGate = this.ctx.createGain();
+    const m_midGate = this.ctx.createGain();
+    const m_highGate = this.ctx.createGain();
+
     this.masterLimiter = this.ctx.createDynamicsCompressor();
     this.masterLimiter.threshold.setValueAtTime(-0.5, this.ctx.currentTime);
     this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
     this.masterLimiter.ratio.setValueAtTime(20, this.ctx.currentTime);
-    this.masterLimiter.attack.setValueAtTime(0.001, this.ctx.currentTime);
-    this.masterLimiter.release.setValueAtTime(0.1, this.ctx.currentTime);
+    this.masterLimiter.attack.setValueAtTime(0.003, this.ctx.currentTime);
+    this.masterLimiter.release.setValueAtTime(0.05, this.ctx.currentTime);
+
+    m_masterFilter.connect(m_lowPass);
+    m_lowPass.connect(m_lowGate);
+    m_lowGate.connect(this.masterLimiter);
+
+    m_masterFilter.connect(m_midPassLow);
+    m_midPassLow.connect(m_midPassHigh);
+    m_midPassHigh.connect(m_midGate);
+    m_midGate.connect(this.masterLimiter);
+
+    m_masterFilter.connect(m_highPass);
+    m_highPass.connect(m_highGate);
+    m_highGate.connect(this.masterLimiter);
+
+    // Store gates for quick access (internal use)
+    (this.masterFX as any).lowGate = m_lowGate;
+    (this.masterFX as any).midGate = m_midGate;
+    (this.masterFX as any).highGate = m_highGate;
 
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
@@ -242,6 +370,41 @@ class AudioEngine {
     }
   }
 
+  public updateMasterFX(state: FXState) {
+    if (!this.masterFX || !this.ctx) return;
+    const { delay, reverb, chorus, phaser } = state;
+    
+    if (delay) {
+      this.masterFX.delay.delayTime.setTargetAtTime(delay.time, this.ctx.currentTime, 0.05);
+      this.masterFX.delayGain.gain.setTargetAtTime(delay.active ? delay.mix : 0, this.ctx.currentTime, 0.05);
+    }
+    if (reverb) {
+      this.masterFX.reverbGain.gain.setTargetAtTime(reverb.active ? reverb.mix : 0, this.ctx.currentTime, 0.05);
+    }
+    if (chorus) {
+      this.masterFX.chorusLFO.frequency.setTargetAtTime(chorus.rate * 5, this.ctx.currentTime, 0.05);
+      this.masterFX.chorusGain.gain.setTargetAtTime(chorus.active ? chorus.mix : 0, this.ctx.currentTime, 0.05);
+    }
+    if (phaser) {
+      this.masterFX.phaserLFO.frequency.setTargetAtTime(phaser.rate * 5, this.ctx.currentTime, 0.05);
+      this.masterFX.phaserGain.gain.setTargetAtTime(phaser.active ? phaser.mix : 0, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  public updateCrossover(state: { low200: boolean, mid1000: boolean, high3000: boolean }) {
+    if (!this.masterFX || !this.ctx) return;
+    const mfx = this.masterFX as any;
+    mfx.lowGate.gain.setTargetAtTime(state.low200 ? 1 : 0, this.ctx.currentTime, 0.02);
+    mfx.midGate.gain.setTargetAtTime(state.mid1000 ? 1 : 0, this.ctx.currentTime, 0.02);
+    mfx.highGate.gain.setTargetAtTime(state.high3000 ? 1 : 0, this.ctx.currentTime, 0.02);
+  }
+
+  public setMasterFilter(freq: number, type: BiquadFilterType = 'lowpass') {
+    if (!this.masterFX || !this.ctx) return;
+    this.masterFX.masterFilter.type = type;
+    this.masterFX.masterFilter.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
+  }
+
   public updateChannel(id: string, state: Partial<ChannelState>) {
     const channel = this.channels.get(id);
     if (!channel || !this.ctx) return;
@@ -399,8 +562,9 @@ class AudioEngine {
         if (max > this.tempoDriftThreshold && (this.ctx.currentTime - this.lastTransientTime) > 0.25) {
           const interval = this.ctx.currentTime - this.lastTransientTime;
           this.detectedBPM = 60 / interval;
-          // Smooth the drift
-          this.bpm = this.bpm * 0.95 + this.detectedBPM * 0.05;
+          // Smooth the drift - allow more sensitivity based on threshold
+          const weight = 0.1; // More responsive
+          this.bpm = this.bpm * (1 - weight) + this.detectedBPM * weight;
           this.lastTransientTime = this.ctx.currentTime;
           if (this.onBpmChange) {
             this.onBpmChange(Math.round(this.bpm));
@@ -422,7 +586,7 @@ class AudioEngine {
       }
     });
 
-    this.timerID = window.setTimeout(() => this.scheduler(bpm), this.lookahead);
+    this.timerID = window.setTimeout(() => this.scheduler(this.bpm), this.lookahead);
   }
 
   private scheduleNote(track: PulseTrack, step: number, time: number) {

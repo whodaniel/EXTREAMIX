@@ -307,11 +307,14 @@ const ImagingView = ({
             {sources.map(source => {
               const isSelected = activeSourceId === source.id;
               return (
-              <div 
+              <motion.div 
                  key={source.id} 
                  id={`vis-config-${source.id}`}
+                 initial={false}
+                 animate={isSelected ? { scale: [1, 1.02, 1], borderColor: 'rgba(56,189,248,0.5)' } : { scale: 1, borderColor: 'rgba(255,255,255,0.05)' }}
+                 transition={{ duration: 0.5 }}
                  className={`rounded-2xl p-5 border space-y-6 transition-colors group ${
-                   isSelected ? 'bg-primary/10 border-primary/50 shadow-[0_0_30px_rgba(56,189,248,0.15)]' : 'bg-surface-container-low/50 border-white/5 hover:bg-surface-container-low'
+                   isSelected ? 'bg-primary/10 shadow-[0_0_30px_rgba(56,189,248,0.15)] outline outline-2 outline-primary/20' : 'bg-surface-container-low/50 hover:bg-surface-container-low'
                  }`}
               >
                 <div className="flex items-center justify-between">
@@ -438,7 +441,7 @@ const ImagingView = ({
                     ))}
                   </select>
                 </div>
-              </div>
+              </motion.div>
             );
             })}
 
@@ -852,7 +855,7 @@ const ConsoleView = ({
                 <h4 className="font-headline text-sm text-white font-black uppercase glow-text">MASTER</h4>
               </div>
 
-              <div className="flex-1 flex gap-3 z-10 min-h-0">
+              <div className="flex-1 flex gap-2 z-10 min-h-0">
                  {/* Master VU & Fader */}
                  <div className="flex-1 bg-black/40 rounded-2xl p-2 flex items-stretch gap-2 border border-white/5">
                     <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="vertical" className="w-1.5 h-full opacity-100" />
@@ -863,13 +866,38 @@ const ConsoleView = ({
                         value={sequencer.masterVolume}
                         onChange={e => {
                            const val = parseFloat(e.target.value);
-                           audioEngine.setMasterVolume(val);
                            setSequencer(prev => ({ ...prev, masterVolume: val }));
                         }}
                         className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical cursor-pointer"
                         style={{ WebkitAppearance: 'slider-vertical' } as any}
                       />
                     </div>
+                 </div>
+
+                 {/* MASTER FX SHORTCUTS */}
+                 <div className="w-8 flex flex-col justify-around bg-black/40 rounded-xl py-2 border border-white/5">
+                    {[
+                       { id: 'delay' as const, icon: Clock, label: 'DLY' },
+                       { id: 'reverb' as const, icon: Waves, label: 'RVB' },
+                       { id: 'chorus' as const, icon: Disc, label: 'CHO' },
+                       { id: 'phaser' as const, icon: Wind, label: 'PHS' }
+                    ].map(fx => {
+                       const isActive = sequencer.masterFX[fx.id].active;
+                       return (
+                          <button
+                             key={fx.id}
+                             onClick={() => setSequencer(prev => ({
+                                ...prev,
+                                masterFX: { ...prev.masterFX, [fx.id]: { ...prev.masterFX[fx.id], active: !isActive } }
+                             }))}
+                             title={`MASTER_${fx.label}`}
+                             className={`mx-1 p-1 rounded-lg transition-all flex flex-col items-center gap-0.5 ${isActive ? 'bg-primary text-on-primary shadow-[0_0_8px_#38bdf8]' : 'bg-white/5 text-outline opacity-40 hover:opacity-100'}`}
+                          >
+                             <fx.icon className="w-2.5 h-2.5" />
+                             <span className="text-[5px] font-black">{fx.label}</span>
+                          </button>
+                       );
+                    })}
                  </div>
               </div>
 
@@ -1511,8 +1539,8 @@ export default function App() {
       }
     }
     return [
-      { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
-      { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'v-synth', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'drum-machine', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
       { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
       { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
     ];
@@ -1576,6 +1604,13 @@ export default function App() {
   };
 
   const [sequencer, setSequencer] = useState<SequencerState>(() => {
+    const defaultMasterFX: FXState = {
+      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+    };
+
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('extreamix_sequencer');
       if (saved) {
@@ -1584,7 +1619,8 @@ export default function App() {
            if (parsed.tracks) return {
              ...parsed,
              tempoDriftEnabled: parsed.tempoDriftEnabled || false,
-             masterVolume: parsed.masterVolume || 0.9
+             masterVolume: parsed.masterVolume || 0.9,
+             masterFX: parsed.masterFX || defaultMasterFX
            };
          } catch(e) {}
       }
@@ -1600,7 +1636,8 @@ export default function App() {
       masterTick: 0,
       tempoDriftEnabled: false,
       tempoDriftThreshold: 40,
-      masterVolume: 0.9
+      masterVolume: 0.9,
+      masterFX: defaultMasterFX
     };
   });
   
@@ -1701,7 +1738,9 @@ export default function App() {
   useEffect(() => {
     audioEngine.setMasterVolume(sequencer.masterVolume);
     audioEngine.setTempoDriftThreshold(sequencer.tempoDriftThreshold);
-  }, [sequencer.masterVolume, sequencer.tempoDriftThreshold]);
+    audioEngine.updateMasterFX(sequencer.masterFX);
+    audioEngine.updateCrossover(crossoverGates);
+  }, [sequencer.masterVolume, sequencer.tempoDriftThreshold, sequencer.masterFX, crossoverGates]);
 
 
   useEffect(() => {
@@ -1846,7 +1885,8 @@ export default function App() {
     };
     videoEngine.onSelectSource = (id) => {
        setActiveVideoSourceId(id);
-       setCurrentView('vision');
+       // Only switch view if we're not already in a view that handles imaging
+       // This prevents jarring jumps if the user is interacting with the canvas
     };
     return () => {
       videoEngine.onUpdateSource = undefined;
@@ -1857,7 +1897,9 @@ export default function App() {
   const handleAddVideoSource = async () => {
     try {
       let captureConfig: any = {
-        video: true,
+        video: {
+          displaySurface: "browser", // Prefer browser tabs for better control
+        },
         audio: {
           suppressLocalAudioPlayback: true,
           echoCancellation: false,
@@ -1876,11 +1918,16 @@ export default function App() {
       if (window.CaptureController) {
         // @ts-ignore
         controller = new CaptureController();
+        // Force the browser to stay focused on the current app tab
         controller.setFocusBehavior("no-focus-change");
         captureConfig.controller = controller;
       }
 
       const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
+      
+      // Secondary focus fallback - though browsers often throttle this, 
+      // calling it immediately after a success is most likely to succeed.
+      window.focus();
       
       const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
       

@@ -261,8 +261,8 @@ class VideoEngine {
         // Apply pulse modulation if latched
         let finalOpacity = source.opacity;
         if (source.pulseRouting && source.pulseRouting.length > 0) {
-          // Multiply base opacity by pulse envelope (floor to avoid zero glitches)
-          finalOpacity = source.opacity * (0.1 + (source.pulseOpacity || 0) * 0.9);
+          // Multiply base opacity by pulse envelope (floor at 0 for hard strobe)
+          finalOpacity = source.opacity * (source.pulseOpacity || 0);
         }
         
         this.ctx.globalAlpha = finalOpacity;

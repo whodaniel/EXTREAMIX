@@ -66,6 +66,7 @@ export interface SequencerState {
   tempoDriftThreshold: number;
   masterTempoSourceId?: string; // Channel ID to track for BPM
   masterVolume: number;
+  masterFX: FXState;
 }
 
 export interface RoutingSource {
