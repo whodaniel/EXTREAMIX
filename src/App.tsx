@@ -347,6 +347,24 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
                </div>
 
                <div className="space-y-2">
+                 <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Pulse Routing Latch</div>
+                 <select 
+                   multiple
+                   value={source.pulseRouting || []}
+                   onChange={e => {
+                     const vals = Array.from(e.target.selectedOptions, option => option.value);
+                     onUpdate(source.id, { pulseRouting: vals });
+                   }}
+                   className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-2 text-[10px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider min-h-[60px]"
+                 >
+                   <option value="trk-1" className="p-1">ALPHA_PULSE [Trk 1]</option>
+                   <option value="trk-2" className="p-1">BETA_KICK [Trk 2]</option>
+                   <option value="trk-3" className="p-1">GAMMA_SUB [Trk 3]</option>
+                 </select>
+                 <div className="text-[8px] text-outline mt-1 font-mono uppercase leading-tight">Cmd/Ctrl-Click to multi-select. Select none to UNLATCH.</div>
+               </div>
+
+               <div className="space-y-2">
                  <div className="flex items-center gap-2 font-headline text-[9px] text-outline uppercase tracking-wider">
                    <Volume2 className="w-3 h-3 text-primary" />
                    <span>Audio Routing Bus</span>
@@ -760,7 +778,19 @@ const ConsoleView = ({
   );
 };
 
-const PulseView = ({ state, toggleStep, onBpmChange, onTogglePlay }: { state: SequencerState, toggleStep: (i: number) => void, onBpmChange: (bpm: number) => void, onTogglePlay: () => void }) => {
+const PulseView = ({ 
+  state, 
+  activeSteps,
+  onUpdateTrack, 
+  onBpmChange, 
+  onTogglePlay 
+}: { 
+  state: SequencerState, 
+  activeSteps: {[key: string]: number},
+  onUpdateTrack: (trackId: string, updates: Partial<PulseTrack>) => void, 
+  onBpmChange: (bpm: number) => void, 
+  onTogglePlay: () => void 
+}) => {
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-8">
@@ -768,8 +798,8 @@ const PulseView = ({ state, toggleStep, onBpmChange, onTogglePlay }: { state: Se
         {/* Header & Transport */}
         <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6 border-b border-primary/20 pb-6">
            <div>
-             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">PULSE_SEQ_v2</h2>
-             <span className="font-headline text-[10px] text-outline tracking-[0.4em] uppercase font-bold">Lookahead Scheduler // Logic Array</span>
+             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">PULSE_SEQ_v3</h2>
+             <span className="font-headline text-[10px] text-outline tracking-[0.4em] uppercase font-bold">Multi-Resolution Quantization Matrix</span>
            </div>
            
            <div className="flex bg-black/50 border border-white/10 rounded-xl p-2 gap-2 shadow-2xl backdrop-blur-md">
@@ -795,47 +825,95 @@ const PulseView = ({ state, toggleStep, onBpmChange, onTogglePlay }: { state: Se
            </div>
         </div>
 
-        {/* 16-Step Grid */}
-        <div className="bg-surface-container-highest/30 p-6 md:p-8 border border-white/5 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-sm">
-           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC41Ii8+PC9zdmc+')] opacity-20 pointer-events-none" />
-           
-           <div className="grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-16 gap-2 md:gap-4 position-relative z-10">
-             {state.steps.map((active, i) => {
-               const isPlayhead = state.currentStep === i;
-               const isDownbeat = i % 4 === 0;
-               return (
-                 <button
-                   key={i}
-                   onClick={() => toggleStep(i)}
-                   className={`group relative aspect-[2/3] flex flex-col items-center justify-end pb-3 rounded-md transition-all border outline-none ${
-                     active ? 'border-primary/50 shadow-[0px_0px_15px_rgba(56,189,248,0.3)] bg-gradient-to-t from-primary/30 to-black/40' : 'border-white/5 bg-black/60 hover:border-white/20'
-                   } ${isPlayhead ? 'border-white bg-white/10' : ''}`}
-                 >
-                   {/* Step Number Top */}
-                   <span className={`absolute top-2 font-headline text-[7px] tracking-widest uppercase ${active ? 'text-primary' : 'text-outline/30'} ${isDownbeat ? 'font-black' : ''}`}>
-                     {String(i + 1).padStart(2, '0')}
-                   </span>
+        {/* Tracks List */}
+        <div className="flex flex-col gap-4">
+           {state.tracks.map((track) => (
+             <div key={track.id} className="bg-surface-container-highest/30 p-4 border border-white/5 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-sm flex flex-col gap-4">
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC41Ii8+PC9zdmc+')] opacity-20 pointer-events-none" />
+                
+                {/* Track Header */}
+                <div className="flex justify-between items-center z-10">
+                   <h3 className="font-headline font-black text-white px-2 tracking-[0.2em]">{track.name}</h3>
+                   <div className="flex items-center gap-2">
+                      <select 
+                        value={track.division}
+                        onChange={(e) => onUpdateTrack(track.id, { division: parseInt(e.target.value) })}
+                        className="bg-black/50 border border-white/10 text-white font-mono text-[10px] rounded p-1 outline-none focus:border-primary/50"
+                      >
+                         <option value="4">1/4</option>
+                         <option value="8">1/8</option>
+                         <option value="16">1/16</option>
+                         <option value="32">1/32</option>
+                         <option value="64">1/64</option>
+                         <option value="128">1/128</option>
+                      </select>
+                      <select 
+                        value={track.length}
+                        onChange={(e) => {
+                          const len = parseInt(e.target.value);
+                          const newSteps = [...track.steps];
+                          if (newSteps.length < len) {
+                             newSteps.push(...Array(len - newSteps.length).fill(false));
+                          } else {
+                             newSteps.length = len;
+                          }
+                          onUpdateTrack(track.id, { length: len, steps: newSteps });
+                        }}
+                        className="bg-black/50 border border-white/10 text-white font-mono text-[10px] rounded p-1 outline-none focus:border-primary/50"
+                      >
+                         <option value="4">4 Steps</option>
+                         <option value="8">8 Steps</option>
+                         <option value="16">16 Steps</option>
+                         <option value="32">32 Steps</option>
+                         <option value="64">64 Steps</option>
+                         <option value="128">128 Steps</option>
+                      </select>
+                   </div>
+                </div>
 
-                   {/* Center Reticle (Active indication) */}
-                   <div className={`w-3 h-3 rounded-sm rotate-45 border transition-all ${
-                     active ? 'bg-primary border-primary shadow-[0_0_10px_#38bdf8] scale-110' : 'border-white/10 bg-transparent'
-                   } ${isPlayhead ? 'bg-white border-white scale-150' : ''}`} />
+                {/* Track Steps Grid */}
+                <div className={`grid gap-2 relative z-10`} style={{ gridTemplateColumns: `repeat(auto-fit, minmax(32px, 1fr))` }}>
+                  {track.steps.map((active, i) => {
+                    const isPlayhead = activeSteps[track.id] === i;
+                    const isDownbeat = i % (track.length >= 16 ? 4 : 2) === 0;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          const s = [...track.steps];
+                          s[i] = !s[i];
+                          onUpdateTrack(track.id, { steps: s });
+                        }}
+                        className={`group relative aspect-[1/1] sm:aspect-[2/3] flex flex-col items-center justify-end pb-2 rounded-md transition-all border outline-none ${
+                          active ? 'border-primary/50 shadow-[0px_0px_10px_rgba(56,189,248,0.3)] bg-gradient-to-t from-primary/30 to-black/40' : 'border-white/5 bg-black/60 hover:border-white/20'
+                        } ${isPlayhead ? 'border-white bg-white/10' : ''}`}
+                      >
+                        {/* Step Number Top */}
+                        <span className={`absolute top-1 font-headline text-[6px] tracking-widest uppercase ${active ? 'text-primary' : 'text-outline/30'} ${isDownbeat ? 'font-black' : ''}`}>
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
 
-                   {/* Bottom Indicator */}
-                   <div className={`mt-3 w-1/2 h-[2px] transition-all ${
-                     active ? 'bg-primary' : 'bg-white/5'
-                   } ${isDownbeat ? 'w-full' : ''}`} />
-                 </button>
-               );
-             })}
-           </div>
+                        {/* Center Reticle (Active indication) */}
+                        <div className={`w-2 h-2 rounded-sm rotate-45 border transition-all my-auto ${
+                          active ? 'bg-primary border-primary shadow-[0_0_10px_#38bdf8] scale-110' : 'border-white/10 bg-transparent'
+                        } ${isPlayhead ? 'bg-white border-white scale-150' : ''}`} />
+
+                        {/* Bottom Indicator */}
+                        <div className={`w-1/2 h-[2px] mt-1 transition-all ${
+                          active ? 'bg-primary' : 'bg-white/5'
+                        } ${isDownbeat ? 'w-full' : ''}`} />
+                      </button>
+                    );
+                  })}
+                </div>
+             </div>
+           ))}
         </div>
 
         {/* Info Footer */}
         <div className="flex justify-between items-center font-headline text-[8px] text-outline/50 tracking-[0.3em] border-t border-white/5 pt-4">
-           <span>TICK_RATE // 1/16th </span>
-           <span>LOGIC_ARRAY_ACTIVE // TRUE</span>
-           <span>MEMORY_ALLOC // 16B</span>
+           <span>MULTI_TIER_ROUTING // ENABLED</span>
+           <span>MASTER_SYNC // QUARTZ</span>
         </div>
       </div>
     </div>
@@ -1249,15 +1327,28 @@ export default function App() {
   const [sequencer, setSequencer] = useState<SequencerState>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('extreamix_sequencer');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+         try {
+           const parsed = JSON.parse(saved);
+           // Migration check
+           if (parsed.tracks) return parsed;
+         } catch(e) {}
+      }
     }
     return {
-      steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true],
+      tracks: [
+        { id: 'trk-1', name: 'ALPHA_PULSE', division: 16, length: 16, steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true] },
+        { id: 'trk-2', name: 'BETA_KICK', division: 4, length: 4, steps: [true, true, true, true] },
+        { id: 'trk-3', name: 'GAMMA_SUB', division: 8, length: 8, steps: [false, true, false, true, false, false, true, false] }
+      ],
       bpm: 120,
-      currentStep: -1,
-      isPlaying: false
+      isPlaying: false,
+      masterTick: 0
     };
   });
+  
+  // High-resolution clock tick to drive UI playheads
+  const [pulseActiveSteps, setPulseActiveSteps] = useState<{[key: string]: number}>({});
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
   const [routingSources, setRoutingSources] = useState<RoutingSource[]>([
     { id: 'src-1', name: 'TAB_AUDIO_LOFI', active: true, type: 'tab' },
@@ -1353,15 +1444,6 @@ export default function App() {
   useEffect(() => {
     audioEngine.init();
     channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
-    
-    audioEngine.onStep = (step) => {
-      setSequencer(prev => ({ ...prev, currentStep: step }));
-      // Simulate limiter catching peaks on downbeats
-      if (step % 4 === 0) {
-        setMasterLimiterActive(true);
-        setTimeout(() => setMasterLimiterActive(false), 100);
-      }
-    };
   }, []);
 
   const toggleCrossoverGate = (gate: keyof typeof crossoverGates) => {
@@ -1416,12 +1498,49 @@ export default function App() {
   const handlePlay = () => {
     if (sequencer.isPlaying) {
       audioEngine.stopSequencer();
-      setSequencer(prev => ({ ...prev, isPlaying: false, currentStep: -1 }));
+      setSequencer(prev => ({ ...prev, isPlaying: false }));
+      setPulseActiveSteps({});
     } else {
-      audioEngine.startSequencer(sequencer.bpm, sequencer.steps);
+      audioEngine.startSequencer(sequencer.bpm, sequencer.tracks);
       setSequencer(prev => ({ ...prev, isPlaying: true }));
     }
   };
+
+  useEffect(() => {
+    audioEngine.onStep = (trackId, step) => {
+      setPulseActiveSteps(prev => ({ ...prev, [trackId]: step }));
+      
+      // Update visual latches tied to this pulse map
+      setVideoSources(prev => prev.map(source => {
+         if (source.pulseRouting && source.pulseRouting.includes(trackId)) {
+            // Trigger visual envelope 
+            return { ...source, pulseOpacity: 1 };
+         }
+         return source;
+      }));
+    };
+  }, []);
+  
+  // Animation loop to decay visual pulse Opacity
+  useEffect(() => {
+    let animId: number;
+    const decay = () => {
+      setVideoSources(prev => {
+        let changed = false;
+        const next = prev.map(s => {
+          if (s.pulseOpacity > 0) {
+            changed = true;
+            return { ...s, pulseOpacity: Math.max(0, s.pulseOpacity - 0.05) };
+          }
+          return s;
+        });
+        return changed ? next : prev;
+      });
+      animId = requestAnimationFrame(decay);
+    };
+    decay();
+    return () => cancelAnimationFrame(animId);
+  }, []);
 
   useEffect(() => {
     videoEngine.onUpdateSource = (id, update) => {
@@ -1725,7 +1844,13 @@ export default function App() {
               {currentView === 'sequencer' && (
                 <PulseView 
                   state={sequencer} 
-                  toggleStep={toggleStep} 
+                  activeSteps={pulseActiveSteps}
+                  onUpdateTrack={(trackId, updates) => {
+                    setSequencer(prev => ({
+                      ...prev,
+                      tracks: prev.tracks.map(t => t.id === trackId ? { ...t, ...updates } : t)
+                    }))
+                  }}
                   onBpmChange={(bpm) => setSequencer(prev => ({ ...prev, bpm }))}
                   onTogglePlay={handlePlay}
                 />

@@ -15,14 +15,15 @@ class AudioEngine {
   }> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   
+  private trackStates: Map<string, { currentStep: number, nextNoteTime: number }> = new Map();
+  private tracks: PulseTrack[] = [];
+  
   // Sequencer state
   private timerID: number | null = null;
-  private nextNoteTime: number = 0;
-  private current16thNote: number = 0;
   private lookahead: number = 25.0;
   private scheduleAheadTime: number = 0.1;
 
-  public onStep: (step: number) => void = () => {};
+  public onStep: (trackId: string, step: number) => void = () => {};
 
   public init() {
     if (this.ctx) return;
@@ -177,13 +178,22 @@ class AudioEngine {
     osc.stop(time + 0.15);
   }
 
-  public startSequencer(bpm: number, sequence: boolean[]) {
+  public startSequencer(bpm: number, tracks: PulseTrack[]) {
     if (!this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
     
-    this.current16thNote = 0;
-    this.nextNoteTime = this.ctx.currentTime + 0.05;
-    this.scheduler(bpm, sequence);
+    this.tracks = tracks;
+    this.trackStates.clear();
+    
+    const startTime = this.ctx.currentTime + 0.05;
+    tracks.forEach(track => {
+      this.trackStates.set(track.id, {
+        currentStep: 0,
+        nextNoteTime: startTime
+      });
+    });
+    
+    this.scheduler(bpm);
   }
 
   public stopSequencer() {
@@ -193,29 +203,43 @@ class AudioEngine {
     }
   }
 
-  private scheduler(bpm: number, sequence: boolean[]) {
+  private scheduler(bpm: number) {
     if (!this.ctx) return;
-    while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
-      this.scheduleNote(this.current16thNote, this.nextNoteTime, sequence);
-      this.advanceNote(bpm);
-    }
-    this.timerID = window.setTimeout(() => this.scheduler(bpm, sequence), this.lookahead);
+    
+    let hasScheduledAnything = false;
+
+    this.tracks.forEach(track => {
+      const state = this.trackStates.get(track.id);
+      if (!state) return;
+
+      while (state.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
+        this.scheduleNote(track, state.currentStep, state.nextNoteTime);
+        this.advanceNote(bpm, track, state);
+        hasScheduledAnything = true;
+      }
+    });
+
+    this.timerID = window.setTimeout(() => this.scheduler(bpm), this.lookahead);
   }
 
-  private scheduleNote(beatNumber: number, time: number, sequence: boolean[]) {
-    this.onStep(beatNumber);
-    if (sequence[beatNumber]) {
+  private scheduleNote(track: PulseTrack, step: number, time: number) {
+    this.onStep(track.id, step);
+    if (track.steps[step]) {
       const rootFreq = 55.0;
       const intervals = [0, 12, 7, 0, 3, 12, 7, 10];
-      const freq = rootFreq * Math.pow(1.05946, intervals[beatNumber % 8]);
-      this.playSynth(time, freq);
+      const freq = rootFreq * Math.pow(1.05946, intervals[step % intervals.length]);
+      // Vary base frequency if we have multiple tracks
+      const tFreq = freq * (1 + (parseInt(track.id.replace(/\D/g,'')) % 3) * 0.5);
+      this.playSynth(time, isNaN(tFreq) ? freq : tFreq);
     }
   }
 
-  private advanceNote(bpm: number) {
+  private advanceNote(bpm: number, track: PulseTrack, state: { currentStep: number, nextNoteTime: number }) {
     const secondsPerBeat = 60.0 / bpm;
-    this.nextNoteTime += 0.25 * secondsPerBeat;
-    this.current16thNote = (this.current16thNote + 1) % 16;
+    // Division: 4 = 1/4 note (1 beat), 8 = 1/8 note (0.5 beats), 16 = 1/16 note (0.25 beats)
+    const beatsPerStep = 4 / track.division;
+    state.nextNoteTime += beatsPerStep * secondsPerBeat;
+    state.currentStep = (state.currentStep + 1) % track.length;
   }
 }
 

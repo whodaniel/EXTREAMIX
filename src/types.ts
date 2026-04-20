@@ -16,6 +16,8 @@ export interface VideoSource {
   position: Point;
   scale: number;
   audioChannelId?: string;
+  pulseRouting: string[]; // List of Pulse Track IDs this asset is latched to. Empty means unlatched.
+  pulseOpacity: number; // Animated value modulated by the engine.
 }
 
 export interface EQState {
@@ -35,11 +37,19 @@ export interface ChannelState {
   eq: EQState;
 }
 
-export interface SequencerState {
+export interface PulseTrack {
+  id: string;
+  name: string;
   steps: boolean[];
+  division: number; // Note division: 4 = 1/4 note, 8 = 1/8 note, 16 = 1/16, etc.
+  length: number;
+}
+
+export interface SequencerState {
+  tracks: PulseTrack[];
   bpm: number;
-  currentStep: number;
   isPlaying: boolean;
+  masterTick: number; // Internal high-resolution tick
 }
 
 export interface RoutingSource {

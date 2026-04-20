@@ -122,7 +122,9 @@ class VideoEngine {
       blendMode: 'source-over',
       active: true,
       position: { x: 0, y: 0 },
-      scale: 1
+      scale: 1,
+      pulseRouting: [],
+      pulseOpacity: 0
     };
 
     this.sources.set(id, source);
@@ -160,7 +162,14 @@ class VideoEngine {
       this.sources.forEach(source => {
         if (!source.active || !this.ctx) return;
 
-        this.ctx.globalAlpha = source.opacity;
+        // Apply pulse modulation if latched
+        let finalOpacity = source.opacity;
+        if (source.pulseRouting && source.pulseRouting.length > 0) {
+          // Multiply base opacity by pulse envelope (floor to avoid zero glitches)
+          finalOpacity = source.opacity * (0.1 + (source.pulseOpacity || 0) * 0.9);
+        }
+        
+        this.ctx.globalAlpha = finalOpacity;
         
         const mode = source.blendMode;
         if (mode === 'additive') this.ctx.globalCompositeOperation = 'lighter';
