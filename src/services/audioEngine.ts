@@ -28,6 +28,7 @@ interface ChannelNodes {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private masterLimiter: DynamicsCompressorNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
   private channels: Map<string, ChannelNodes> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
@@ -36,6 +37,7 @@ class AudioEngine {
   private tracks: PulseTrack[] = [];
   private bpm: number = 120;
   private tempoDriftEnabled: boolean = false;
+  private tempoDriftThreshold: number = 40;
   private masterTempoSourceId?: string;
   private lastTransientTime: number = 0;
   private detectedBPM: number = 120;
@@ -46,6 +48,12 @@ class AudioEngine {
   private scheduleAheadTime: number = 0.1;
 
   public onStep: (trackId: string, step: number, isActive: boolean) => void = () => {};
+  public onBpmChange?: (bpm: number) => void;
+  public onLimiterActive?: (active: boolean) => void;
+
+  public setTempoDriftThreshold(v: number) {
+    this.tempoDriftThreshold = v;
+  }
 
   public init() {
     if (this.ctx) return;
@@ -54,11 +62,27 @@ class AudioEngine {
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0.9;
     
+    this.masterLimiter = this.ctx.createDynamicsCompressor();
+    this.masterLimiter.threshold.setValueAtTime(-0.5, this.ctx.currentTime);
+    this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
+    this.masterLimiter.ratio.setValueAtTime(20, this.ctx.currentTime);
+    this.masterLimiter.attack.setValueAtTime(0.001, this.ctx.currentTime);
+    this.masterLimiter.release.setValueAtTime(0.1, this.ctx.currentTime);
+
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
     
-    this.masterGain.connect(this.masterAnalyser);
+    this.masterGain.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.masterAnalyser);
     this.masterAnalyser.connect(this.ctx.destination);
+
+    const checkLimiter = () => {
+      if (this.masterLimiter && this.onLimiterActive) {
+        this.onLimiterActive(this.masterLimiter.reduction < -0.1);
+      }
+      requestAnimationFrame(checkLimiter);
+    };
+    checkLimiter();
   }
 
   public getContext() {
@@ -372,12 +396,15 @@ class AudioEngine {
         }
         
         // Simple peak detector for "transients" to sync BPM
-        if (max > 40 && (this.ctx.currentTime - this.lastTransientTime) > 0.25) {
+        if (max > this.tempoDriftThreshold && (this.ctx.currentTime - this.lastTransientTime) > 0.25) {
           const interval = this.ctx.currentTime - this.lastTransientTime;
           this.detectedBPM = 60 / interval;
           // Smooth the drift
           this.bpm = this.bpm * 0.95 + this.detectedBPM * 0.05;
           this.lastTransientTime = this.ctx.currentTime;
+          if (this.onBpmChange) {
+            this.onBpmChange(Math.round(this.bpm));
+          }
         }
       }
     }

@@ -63,6 +63,7 @@ export interface SequencerState {
   isPlaying: boolean;
   masterTick: number; // Internal high-resolution tick
   tempoDriftEnabled: boolean;
+  tempoDriftThreshold: number;
   masterTempoSourceId?: string; // Channel ID to track for BPM
   masterVolume: number;
 }

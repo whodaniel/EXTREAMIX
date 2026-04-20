@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Play, 
   Square, 
@@ -107,16 +108,18 @@ const ImagingView = ({
   onAdd, 
   channels,
   activeSourceId,
-  sequencer
+  sequencer,
+  mainCanvasRef
 }: { 
   sources: VideoSource[], 
   onUpdate: (id: string, update: Partial<VideoSource>) => void, 
   onAdd: () => void, 
   channels: ChannelState[],
   activeSourceId: string | null,
-  sequencer: SequencerState
+  sequencer: SequencerState,
+  mainCanvasRef: React.RefObject<HTMLCanvasElement | null>
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
@@ -135,16 +138,6 @@ const ImagingView = ({
   }, [activeSourceId]);
 
   useEffect(() => {
-    if (canvasRef.current) {
-      videoEngine.init(canvasRef.current);
-      try {
-        // @ts-ignore
-        window.extreamixMainStream = canvasRef.current.captureStream(30);
-      } catch(e) {
-        console.warn("Could not capture stream from canvas", e);
-      }
-    }
-
     const checkScreens = async () => {
       if ('getScreenDetails' in window) {
         try {
@@ -165,7 +158,6 @@ const ImagingView = ({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
-      videoEngine.stopRender();
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
@@ -204,13 +196,10 @@ const ImagingView = ({
         ref={containerRef}
         className="flex-[3] min-h-[300px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
       >
-        <canvas 
-          ref={canvasRef} 
-          className="w-full h-full object-contain" 
-          width={1920} height={1080} 
-          role="img" 
-          aria-label="Imaging Module WebGL Canvas"
-        />
+        <div ref={portalRef} className="w-full h-full">
+           {/* Global Canvas will be portalled here when this view is active */}
+           {portalRef.current && mainCanvasRef.current && createPortal(mainCanvasRef.current, portalRef.current)}
+        </div>
         <div className="absolute top-4 left-4 md:top-6 md:left-6 flex flex-col gap-1 pointer-events-none">
           <div className="font-headline text-[9px] md:text-[10px] text-tertiary bg-black/60 px-3 py-1 rounded-full border border-tertiary/20 tracking-widest uppercase backdrop-blur-md">
             IMAGING_OUT // WEBGL2
@@ -843,6 +832,55 @@ const ConsoleView = ({
                 </div>
             </div>
           ))}
+
+          {/* GLOBAL MASTER CHANNEL STRIP */}
+          <div className="w-[110px] shrink-0 flex flex-col gap-4 bg-primary/[0.03] rounded-[2.5rem] border border-primary/20 p-4 shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-3 opacity-20"><Zap className="w-4 h-4 text-primary" /></div>
+              
+              <div className="flex flex-col items-center z-10">
+                <div className="font-headline text-[9px] text-primary tracking-[0.3em] mb-1 uppercase">SIGNAL_SUM</div>
+                <h4 className="font-headline text-sm text-white font-black uppercase glow-text">MASTER</h4>
+              </div>
+
+              <div className="flex-1 flex gap-3 z-10 min-h-0">
+                 {/* Master VU & Fader */}
+                 <div className="flex-1 bg-black/40 rounded-2xl p-2 flex items-stretch gap-2 border border-white/5">
+                    <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="vertical" className="w-1.5 h-full opacity-100" />
+                    
+                    <div className="flex-1 flex flex-col items-center relative">
+                       <input 
+                        type="range" min="0" max="1.5" step="0.01" 
+                        value={sequencer.masterVolume}
+                        onChange={e => {
+                           const val = parseFloat(e.target.value);
+                           audioEngine.setMasterVolume(val);
+                           setSequencer(prev => ({ ...prev, masterVolume: val }));
+                        }}
+                        className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical cursor-pointer"
+                        style={{ WebkitAppearance: 'slider-vertical' } as any}
+                      />
+                    </div>
+                 </div>
+              </div>
+
+              <div className="z-10 flex flex-col gap-2">
+                 <div className="bg-black/60 p-2 rounded-xl border border-error/30 flex flex-col gap-1 items-center">
+                    <div className="flex justify-between w-full px-1">
+                       <span className="font-mono text-[7px] text-error font-black tracking-widest uppercase">LIMITER</span>
+                       <div className={`w-1.5 h-1.5 rounded-full ${masterLimiterActive ? 'bg-error animate-ping' : 'bg-white/10'}`} />
+                    </div>
+                    <div className={`w-full h-1 rounded-full transition-all duration-75 ${masterLimiterActive ? 'bg-error shadow-[0_0_10px_#f87171]' : 'bg-white/5'}`} />
+                 </div>
+
+                 <div className="bg-primary/90 text-white rounded-xl p-2 text-center shadow-[0_10px_20px_rgba(56,189,248,0.3)]">
+                    <div className="font-mono text-[10px] font-black tracking-tighter leading-none">{Math.round(sequencer.masterVolume * 100)}%</div>
+                    <div className="font-headline text-[6px] font-black uppercase tracking-widest mt-1 opacity-70">GAIN_DB</div>
+                 </div>
+              </div>
+
+              {/* Aesthetic background glow */}
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-primary/10 to-transparent pointer-events-none" />
+          </div>
         </div>
       </div>
 
@@ -1440,6 +1478,7 @@ export default function App() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
+  const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const [channels, setChannels] = useState<ChannelState[]>(() => {
     const defaultFX: FXState = {
@@ -1551,6 +1590,7 @@ export default function App() {
       isPlaying: false,
       masterTick: 0,
       tempoDriftEnabled: false,
+      tempoDriftThreshold: 40,
       masterVolume: 0.9
     };
   });
@@ -1648,6 +1688,26 @@ export default function App() {
     }
   }, [matrixMappings]);
 
+  // Master Engine Sync
+  useEffect(() => {
+    audioEngine.setMasterVolume(sequencer.masterVolume);
+    audioEngine.setTempoDriftThreshold(sequencer.tempoDriftThreshold);
+  }, [sequencer.masterVolume, sequencer.tempoDriftThreshold]);
+
+  // Global Engine / Stream Init
+  useEffect(() => {
+    if (mainCanvasRef.current) {
+      videoEngine.init(mainCanvasRef.current);
+      try {
+        // @ts-ignore
+        window.extreamixMainStream = mainCanvasRef.current.captureStream(30);
+      } catch (e) {
+        console.warn("Capture stream failed:", e);
+      }
+    }
+  }, []);
+
+
 
   useEffect(() => {
     audioEngine.init();
@@ -1676,6 +1736,8 @@ export default function App() {
           autoGainControl: false
         },
         surfaceSwitching: "exclude",
+        selfBrowserSurface: "exclude",
+        monitorTypeSurfaces: "exclude",
         preferCurrentTab: false
       };
       
@@ -1740,6 +1802,24 @@ export default function App() {
         setVideoSources(videoEngine.getSources());
       }
     };
+
+    audioEngine.onBpmChange = (bpm) => {
+      setSequencer(prev => {
+        // Only update if it actually changed to prevent render loops
+        if (prev.bpm === bpm) return prev;
+        return { ...prev, bpm };
+      });
+    };
+
+    audioEngine.onLimiterActive = (active) => {
+      setMasterLimiterActive(active);
+    };
+
+    return () => {
+      audioEngine.onStep = () => {};
+      audioEngine.onBpmChange = undefined;
+      audioEngine.onLimiterActive = undefined;
+    };
   }, []);
   
   // Animation loop to decay visual pulse Opacity
@@ -1790,6 +1870,8 @@ export default function App() {
           autoGainControl: false
         },
         surfaceSwitching: "exclude",
+        selfBrowserSurface: "exclude",
+        monitorTypeSurfaces: "exclude",
         preferCurrentTab: false
       };
       
@@ -2131,6 +2213,11 @@ export default function App() {
            </div>
         </div>
       </footer>
+
+      {/* Persistence Layer: Persistent hidden canvas to keep video engine and captureStream active across views */}
+      <div className={`fixed bottom-0 right-0 w-[320px] h-[180px] z-[-1] pointer-events-none opacity-0 invisible ${currentView === 'vision' ? '' : ''}`}>
+         <canvas ref={mainCanvasRef} className="w-full h-full object-contain" />
+      </div>
     </div>
   );
 }
