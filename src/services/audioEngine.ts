@@ -159,49 +159,50 @@ class AudioEngine {
     // Connections: MasterGain -> (Parallel Master FX) -> MasterFilter -> (Split Bands) -> Selector -> MasterLimiter
     // For simplicity, we'll route into a sum, then split
     const masterSum = this.ctx.createGain();
-	this.masterGain.connect(masterSum);
-	m_delayGain.connect(masterSum);
-	m_reverbGain.connect(masterSum);
-	m_phaserGain.connect(masterSum);
-	m_chorusGain.connect(masterSum);
+    this.masterGain.connect(masterSum);
+    m_delayGain.connect(masterSum);
+    m_reverbGain.connect(masterSum);
+    m_phaserGain.connect(masterSum);
+    m_chorusGain.connect(masterSum);
 
-	masterSum.connect(m_masterFilter);
+    masterSum.connect(m_masterFilter);
 
-	// Split for Crossover Gates (Spectral)
-	const m_lowGate = this.ctx.createGain();
-	const m_midGate = this.ctx.createGain();
-	const m_highGate = this.ctx.createGain();
+    // Split for Crossover
+    const m_lowGate = this.ctx.createGain();
+    const m_midGate = this.ctx.createGain();
+    const m_highGate = this.ctx.createGain();
 
-	this.masterLimiter = this.ctx.createDynamicsCompressor();
-	this.masterLimiter.threshold.setValueAtTime(-0.5, this.ctx.currentTime);
-	this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
-	this.masterLimiter.ratio.setValueAtTime(20, this.ctx.currentTime);
-	this.masterLimiter.attack.setValueAtTime(0.003, this.ctx.currentTime);
-	this.masterLimiter.release.setValueAtTime(0.05, this.ctx.currentTime);
+    this.masterLimiter = this.ctx.createDynamicsCompressor();
+    this.masterLimiter.threshold.setValueAtTime(-0.5, this.ctx.currentTime);
+    this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
+    this.masterLimiter.ratio.setValueAtTime(20, this.ctx.currentTime);
+    this.masterLimiter.attack.setValueAtTime(0.003, this.ctx.currentTime);
+    this.masterLimiter.release.setValueAtTime(0.05, this.ctx.currentTime);
 
-	// Spectral Crossover Routing (All signals pass through masterFilter first)
-	m_masterFilter.connect(m_lowPass);
-	m_lowPass.connect(m_lowGate);
-	m_lowGate.connect(this.masterLimiter);
+    m_masterFilter.connect(m_lowPass);
+    m_lowPass.connect(m_lowGate);
+    m_lowGate.connect(this.masterLimiter);
 
-	m_masterFilter.connect(m_midPassLow);
-	m_midPassLow.connect(m_midPassHigh);
-	m_midPassHigh.connect(m_midGate);
-	m_midGate.connect(this.masterLimiter);
+    m_masterFilter.connect(m_midPassLow);
+    m_midPassLow.connect(m_midPassHigh);
+    m_midPassHigh.connect(m_midGate);
+    m_midGate.connect(this.masterLimiter);
 
-	m_masterFilter.connect(m_highPass);
-	m_highPass.connect(m_highGate);
-	m_highGate.connect(this.masterLimiter);
+    m_masterFilter.connect(m_highPass);
+    m_highPass.connect(m_highGate);
+    m_highGate.connect(this.masterLimiter);
 
-	(this.masterFX as any).lowGate = m_lowGate;
-	(this.masterFX as any).midGate = m_midGate;
-	(this.masterFX as any).highGate = m_highGate;
+    // Store gates for quick access (internal use)
+    (this.masterFX as any).lowGate = m_lowGate;
+    (this.masterFX as any).midGate = m_midGate;
+    (this.masterFX as any).highGate = m_highGate;
 
-	this.masterAnalyser = this.ctx.createAnalyser();
-	this.masterAnalyser.fftSize = 256;
-
-	this.masterLimiter.connect(this.masterAnalyser);
-	this.masterAnalyser.connect(this.ctx.destination);
+    this.masterAnalyser = this.ctx.createAnalyser();
+    this.masterAnalyser.fftSize = 256;
+    
+    this.masterGain.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.masterAnalyser);
+    this.masterAnalyser.connect(this.ctx.destination);
 
     const checkLimiter = () => {
       if (this.masterLimiter && this.onLimiterActive) {

@@ -861,17 +861,16 @@ const ConsoleView = ({
                     <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="vertical" className="w-1.5 h-full opacity-100" />
                     
                     <div className="flex-1 flex flex-col items-center relative">
-				<input
-					type="range" min="0" max="1.5" step="0.01"
-					value={sequencer.masterVolume}
-					onChange={e => {
-						const val = parseFloat(e.target.value);
-						audioEngine.setMasterVolume(val);
-						setSequencer(prev => ({ ...prev, masterVolume: val }));
-					}}
-					className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical cursor-pointer"
-					style={{ WebkitAppearance: 'slider-vertical' } as any}
-				/>
+                       <input 
+                        type="range" min="0" max="1.5" step="0.01" 
+                        value={sequencer.masterVolume}
+                        onChange={e => {
+                           const val = parseFloat(e.target.value);
+                           setSequencer(prev => ({ ...prev, masterVolume: val }));
+                        }}
+                        className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical cursor-pointer"
+                        style={{ WebkitAppearance: 'slider-vertical' } as any}
+                      />
                     </div>
                  </div>
 
@@ -1064,38 +1063,28 @@ const PulseView = ({
                  />
               </div>
 
-			{/* Tempo Drift Control */}
-			<div className="flex flex-col justify-center px-4 border-l border-white/10 w-48">
-				<div className="flex justify-between items-center mb-1">
-					<span className="font-headline text-[8px] text-outline tracking-widest uppercase">TEMPO_DRIFT</span>
-					<button
-						onClick={() => onUpdateSequencer({ tempoDriftEnabled: !state.tempoDriftEnabled })}
-						className={`w-6 h-3 rounded-full relative transition-all ${state.tempoDriftEnabled ? 'bg-primary' : 'bg-white/10'}`}
-					>
-						<div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${state.tempoDriftEnabled ? 'right-0.5' : 'left-0.5'}`} />
-					</button>
-				</div>
-				<select
-					value={state.masterTempoSourceId || ''}
-					onChange={e => onUpdateSequencer({ masterTempoSourceId: e.target.value })}
-					className="bg-transparent border-none text-[8px] text-outline uppercase font-mono outline-none"
-				>
-					<option value="">FOLLOW_INTERNAL</option>
-					{channels.map(ch => (
-						<option key={ch.id} value={ch.id}>FOLLOW: {ch.name}</option>
-					))}
-				</select>
-				<div className="flex justify-between items-center mt-2">
-					<span className="font-headline text-[7px] text-outline/60 tracking-widest uppercase">SENSITIVITY</span>
-					<span className="font-mono text-[8px] text-primary">{state.tempoDriftThreshold}</span>
-				</div>
-				<input
-					type="range" min="10" max="100" step="1"
-					value={state.tempoDriftThreshold}
-					onChange={e => onUpdateSequencer({ tempoDriftThreshold: parseInt(e.target.value) })}
-					className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer"
-				/>
-			</div>
+              {/* Tempo Drift Control */}
+              <div className="flex flex-col justify-center px-4 border-l border-white/10 w-48">
+                 <div className="flex justify-between items-center mb-1">
+                   <span className="font-headline text-[8px] text-outline tracking-widest uppercase">TEMPO_DRIFT</span>
+                   <button 
+                     onClick={() => onUpdateSequencer({ tempoDriftEnabled: !state.tempoDriftEnabled })}
+                     className={`w-6 h-3 rounded-full relative transition-all ${state.tempoDriftEnabled ? 'bg-primary' : 'bg-white/10'}`}
+                   >
+                     <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${state.tempoDriftEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                   </button>
+                 </div>
+                 <select 
+                   value={state.masterTempoSourceId || ''}
+                   onChange={e => onUpdateSequencer({ masterTempoSourceId: e.target.value })}
+                   className="bg-transparent border-none text-[8px] text-outline uppercase font-mono outline-none"
+                 >
+                   <option value="">FOLLOW_INTERNAL</option>
+                   {channels.map(ch => (
+                     <option key={ch.id} value={ch.id}>FOLLOW: {ch.name}</option>
+                   ))}
+                 </select>
+              </div>
            </div>
         </div>
 
