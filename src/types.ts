@@ -15,6 +15,7 @@ export interface VideoSource {
   active: boolean;
   position: Point;
   scale: number;
+  zIndex: number;
   audioChannelId?: string;
   pulseRouting: string[]; // List of Pulse Track IDs this asset is latched to. Empty means unlatched.
   pulseOpacity: number; // Animated value modulated by the engine.

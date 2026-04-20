@@ -1,4 +1,4 @@
-import { ChannelState } from '../types';
+import { ChannelState, PulseTrack } from '../types';
 
 class AudioEngine {
   private ctx: AudioContext | null = null;

@@ -33,7 +33,7 @@ import {
   Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset } from './types';
+import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack } from './types';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
@@ -97,11 +97,36 @@ const NavItem = ({
 
 // --- Sub-Views ---
 
-const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSource[], onUpdate: (id: string, update: Partial<VideoSource>) => void, onAdd: () => void, channels: ChannelState[] }) => {
+const ImagingView = ({ 
+  sources, 
+  onUpdate, 
+  onAdd, 
+  channels,
+  activeSourceId
+}: { 
+  sources: VideoSource[], 
+  onUpdate: (id: string, update: Partial<VideoSource>) => void, 
+  onAdd: () => void, 
+  channels: ChannelState[],
+  activeSourceId: string | null
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (activeSourceId && scrollContainerRef.current) {
+      // Small delay to allow layout to settle
+      setTimeout(() => {
+        const el = document.getElementById(`vis-config-${activeSourceId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 50);
+    }
+  }, [activeSourceId]);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -213,7 +238,14 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
            <Zap className="w-4 h-4 md:w-5 md:h-5 text-tertiary animate-pulse" />
         </div>
 
-        <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
+        <div ref={scrollContainerRef} className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
+           {/* Interactions Help */}
+           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 md:p-4 text-[8px] md:text-[10px] text-primary/80 font-mono uppercase leading-relaxed tracking-wider">
+              [DRAG] TO POSITION // [RESIZE_HANDLE] BOTTOM-RIGHT
+              <br />
+              [Z_KEY] + [DRAG] TO SHIFT_Z_DEPTH (Z-INDEX)
+           </div>
+
            {/* Output Monitor Selection */}
            <div className="bg-surface-container-low/80 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-tertiary/20 space-y-4">
               <div className="flex items-center gap-3 mb-2">
@@ -222,16 +254,26 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
               </div>
               
               <div className="flex flex-col gap-2">
-                <button 
-                  onClick={() => handleLaunchProjector()}
-                  className="flex items-center justify-between w-full bg-surface-container-highest/50 hover:bg-surface-container-highest p-3 md:p-4 rounded-xl border border-white/5 transition-all text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExternalLink className="w-3.5 h-3.5 md:w-4 md:h-4 text-outline" />
-                    <span className="font-headline text-[9px] md:text-[10px] text-white uppercase">Pop-out Monitor</span>
-                  </div>
-                  <div className="text-[7px] md:text-[8px] text-outline p-1 bg-black/30 rounded">WNDW</div>
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleLaunchProjector()}
+                    className="flex-1 flex items-center justify-between bg-surface-container-highest/50 hover:bg-surface-container-highest p-3 md:p-4 rounded-xl border border-white/5 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink className="w-3.5 h-3.5 md:w-4 md:h-4 text-outline" />
+                      <span className="font-headline text-[9px] md:text-[10px] text-white uppercase">Pop-out</span>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={onAdd}
+                    className="flex-1 flex items-center justify-between bg-tertiary/20 hover:bg-tertiary/40 p-3 md:p-4 rounded-xl border border-tertiary/30 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Plus className="w-3.5 h-3.5 md:w-4 md:h-4 text-tertiary" />
+                      <span className="font-headline text-[9px] md:text-[10px] text-white uppercase">Inject Feed</span>
+                    </div>
+                  </button>
+                </div>
 
                 {screens.length > 0 && (
                   <div className="space-y-2">
@@ -257,8 +299,16 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
               </div>
            </div>
 
-           {sources.map(source => (
-             <div key={source.id} className="bg-surface-container-low/50 rounded-2xl p-5 border border-white/5 space-y-6 hover:bg-surface-container-low transition-colors group">
+            {sources.map(source => {
+             const isSelected = activeSourceId === source.id;
+             return (
+             <div 
+                key={source.id} 
+                id={`vis-config-${source.id}`}
+                className={`rounded-2xl p-5 border space-y-6 transition-colors group ${
+                  isSelected ? 'bg-primary/10 border-primary/50 shadow-[0_0_30px_rgba(56,189,248,0.15)]' : 'bg-surface-container-low/50 border-white/5 hover:bg-surface-container-low'
+                }`}
+             >
                <div className="flex items-center justify-between">
                  <div className="flex items-center gap-3">
                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
@@ -352,7 +402,7 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
                    multiple
                    value={source.pulseRouting || []}
                    onChange={e => {
-                     const vals = Array.from(e.target.selectedOptions, option => option.value);
+                     const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
                      onUpdate(source.id, { pulseRouting: vals });
                    }}
                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-2 text-[10px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider min-h-[60px]"
@@ -381,7 +431,8 @@ const ImagingView = ({ sources, onUpdate, onAdd, channels }: { sources: VideoSou
                  </select>
                </div>
              </div>
-           ))}
+           );
+           })}
 
            {sources.length === 0 && (
              <div className="py-20 text-center text-outline">
@@ -474,14 +525,18 @@ const ConsoleView = ({
   transcripts, 
   masterLimiterActive,
   crossoverGates,
-  toggleCrossoverGate
+  toggleCrossoverGate,
+  onTranscribe,
+  isTranscribing
 }: { 
   channels: ChannelState[], 
   updateChannel: (id: string, state: Partial<ChannelState>) => void, 
   transcripts: string[],
   masterLimiterActive: boolean,
   crossoverGates: CrossoverState,
-  toggleCrossoverGate: (gate: keyof CrossoverState) => void
+  toggleCrossoverGate: (gate: keyof CrossoverState) => void,
+  onTranscribe: () => void,
+  isTranscribing: boolean
 }) => {
   const mixerCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -757,7 +812,15 @@ const ConsoleView = ({
         <div className="flex-1 bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 flex flex-col shadow-2xl overflow-hidden">
           <div className="flex justify-between items-center mb-4">
              <h4 className="font-headline text-[10px] text-outline tracking-[0.3em] font-black uppercase">Transcription_Bus</h4>
-             <History className="w-3.5 h-3.5 text-outline/40" />
+             <button 
+                onClick={onTranscribe}
+                className={`px-4 py-1.5 rounded-full font-headline text-[9px] font-black uppercase transition-all flex items-center gap-2 ${
+                  isTranscribing ? 'bg-error text-on-error animate-pulse border border-error/50' : 'bg-surface-container-highest text-outline border border-white/10 hover:text-white'
+                }`}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full ${isTranscribing ? 'bg-white' : 'bg-outline'}`} />
+                {isTranscribing ? 'Listening...' : 'Transcribe'}
+              </button>
           </div>
           <div className="flex-1 bg-black/40 rounded-xl border border-white/5 p-4 font-mono text-[11px] leading-relaxed text-emerald-400 overflow-y-auto custom-scrollbar">
             {transcripts.map((t, i) => (
@@ -1462,10 +1525,13 @@ export default function App() {
       let captureConfig: any = {
         video: true,
         audio: {
+          suppressLocalAudioPlayback: true,
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false
-        }
+        },
+        surfaceSwitching: "exclude",
+        preferCurrentTab: false
       };
       
       // @ts-ignore
@@ -1510,14 +1576,17 @@ export default function App() {
     audioEngine.onStep = (trackId, step) => {
       setPulseActiveSteps(prev => ({ ...prev, [trackId]: step }));
       
-      // Update visual latches tied to this pulse map
-      setVideoSources(prev => prev.map(source => {
-         if (source.pulseRouting && source.pulseRouting.includes(trackId)) {
-            // Trigger visual envelope 
-            return { ...source, pulseOpacity: 1 };
-         }
-         return source;
-      }));
+      // Update visual engine & state for latches
+      let needsStateUpdate = false;
+      videoEngine.getSources().forEach(source => {
+        if (source.pulseRouting && source.pulseRouting.includes(trackId)) {
+          source.pulseOpacity = 1;
+          needsStateUpdate = true;
+        }
+      });
+      if (needsStateUpdate) {
+        setVideoSources(videoEngine.getSources());
+      }
     };
   }, []);
   
@@ -1525,29 +1594,34 @@ export default function App() {
   useEffect(() => {
     let animId: number;
     const decay = () => {
-      setVideoSources(prev => {
-        let changed = false;
-        const next = prev.map(s => {
-          if (s.pulseOpacity > 0) {
-            changed = true;
-            return { ...s, pulseOpacity: Math.max(0, s.pulseOpacity - 0.05) };
-          }
-          return s;
-        });
-        return changed ? next : prev;
+      let changed = false;
+      videoEngine.getSources().forEach(source => {
+        if (source.pulseOpacity > 0) {
+          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.05);
+          changed = true;
+        }
       });
+      if (changed) {
+        setVideoSources(videoEngine.getSources());
+      }
       animId = requestAnimationFrame(decay);
     };
     decay();
     return () => cancelAnimationFrame(animId);
   }, []);
 
+  const [activeVideoSourceId, setActiveVideoSourceId] = useState<string | null>(null);
+
   useEffect(() => {
     videoEngine.onUpdateSource = (id, update) => {
        setVideoSources(prev => prev.map(s => s.id === id ? { ...s, ...update } : s));
     };
+    videoEngine.onSelectSource = (id) => {
+       setActiveVideoSourceId(id);
+    };
     return () => {
       videoEngine.onUpdateSource = undefined;
+      videoEngine.onSelectSource = undefined;
     };
   }, []);
 
@@ -1555,7 +1629,14 @@ export default function App() {
     try {
       let captureConfig: any = {
         video: true,
-        audio: true
+        audio: {
+          suppressLocalAudioPlayback: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        },
+        surfaceSwitching: "exclude",
+        preferCurrentTab: false
       };
       
       // @ts-ignore
@@ -1578,10 +1659,10 @@ export default function App() {
         const newChannel: ChannelState = {
           id: newChannelId,
           name: `Feed ${videoSources.length + 1}`,
-          volume: 0.8,
+          volume: 0.7,
           pan: 0,
           depth: 0,
-          mute: false,
+          mute: true, // DEFAULT MUTE TO PREVENT FEEDBACK
           solo: false,
           eq: { low: 0, mid: 0, high: 0 }
         };
@@ -1592,6 +1673,8 @@ export default function App() {
       }
       
       setVideoSources(prev => [...prev, source]);
+      // Focus on the new source
+      setActiveVideoSourceId(source.id);
     } catch (err) {
       console.error('Failed to add video source:', err);
     }
@@ -1702,27 +1785,6 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2">
-            <button 
-              onClick={handleRouteExternalTab}
-              aria-label="Route External Tab"
-              className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white p-2 md:px-4 md:py-2 rounded-lg font-bold text-xs shadow-lg transition-all flex items-center gap-2"
-            >
-              <Monitor className="w-4 h-4" />
-              <span className="hidden md:inline">Route</span>
-            </button>
-            <button 
-              onClick={handleTranscribe}
-              aria-label="Transcribe Audio"
-              className={`p-2 md:px-4 md:py-2 rounded-lg font-bold text-xs transition-all active:scale-95 flex items-center gap-2 ${
-                isTranscribing ? 'bg-error text-on-error animate-pulse shadow-[0_0_15px_#ffb4ab]' : 'bg-surface-container-highest hover:bg-surface-variant border border-white/10 text-white'
-              }`}
-            >
-              {isTranscribing ? <div className="w-2 h-2 rounded-full bg-current animate-pulse" /> : <Mic2 className="w-4 h-4 text-outline" />}
-              <span className="hidden md:inline">{isTranscribing ? 'Recording...' : 'Transcribe'}</span>
-            </button>
-          </div>
-
           <div className="h-8 w-[1px] bg-white/10 mx-1 md:mx-2 hidden sm:block" />
           <div className="flex items-center gap-1">
             <IconButton icon={Settings} label="General Settings" className="scale-90 md:scale-100" onClick={() => setIsSettingsOpen(true)} />
@@ -1831,6 +1893,8 @@ export default function App() {
                   masterLimiterActive={masterLimiterActive}
                   crossoverGates={crossoverGates}
                   toggleCrossoverGate={toggleCrossoverGate}
+                  onTranscribe={handleTranscribe}
+                  isTranscribing={isTranscribing}
                 />
               )}
               {currentView === 'vision' && (
@@ -1839,6 +1903,7 @@ export default function App() {
                   onUpdate={updateVideoSource} 
                   onAdd={handleAddVideoSource} 
                   channels={channels} 
+                  activeSourceId={activeVideoSourceId}
                 />
               )}
               {currentView === 'sequencer' && (
