@@ -285,18 +285,41 @@ class VideoEngine {
             
             this.ctx.drawImage(source.videoElement, dx, dy, dw, dh);
 
-            // Draw resize handle if dragging/moving over?
-            // Actually let's just always draw a subtle handle for the selected one
-            // We can check which one was selected in App state, but here we don't know it easily
-            // unless we pass it. Let's just draw a corner bracket if it's high zIndex? 
-            // Better: draw a faint outline
-            this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(dx, dy, dw, dh);
+            // Visual FX Sweeps / Echos
+            if (source.pulseOpacity > 0.5) {
+               this.ctx.save();
+               this.ctx.globalAlpha = (source.pulseOpacity - 0.5) * 2 * 0.3;
+               this.ctx.filter = 'blur(10px) brightness(2)';
+               this.ctx.drawImage(source.videoElement, dx - 10, dy - 10, dw + 20, dh + 20);
+               this.ctx.restore();
+            }
 
-            // Resize handle indicator
-            this.ctx.fillStyle = 'rgba(56, 189, 248, 0.8)';
-            this.ctx.fillRect(dx + dw - 10, dy + dh - 10, 10, 10);
+            // Draw selection outline and handle
+            this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(dx, dy, dw, dh);
+            
+            // Subtle corner accents
+            const cs = 10;
+            this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+            this.ctx.beginPath();
+            // TL
+            this.ctx.moveTo(dx, dy + cs); this.ctx.lineTo(dx, dy); this.ctx.lineTo(dx + cs, dy);
+            // TR
+            this.ctx.moveTo(dx + dw - cs, dy); this.ctx.lineTo(dx + dw, dy); this.ctx.lineTo(dx + dw, dy + cs);
+            // BR
+            this.ctx.moveTo(dx + dw, dy + dh - cs); this.ctx.lineTo(dx + dw, dy + dh); this.ctx.lineTo(dx + dw - cs, dy + dh);
+            // BL
+            this.ctx.moveTo(dx + cs, dy + dh); this.ctx.lineTo(dx, dy + dh); this.ctx.lineTo(dx, dy + dh - cs);
+            this.ctx.stroke();
+
+            // Resize handle indicator (bottom right)
+            this.ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+            this.ctx.beginPath();
+            this.ctx.moveTo(dx + dw, dy + dh);
+            this.ctx.lineTo(dx + dw - 12, dy + dh);
+            this.ctx.lineTo(dx + dw, dy + dh - 12);
+            this.ctx.fill();
         }
       });
 

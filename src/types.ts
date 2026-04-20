@@ -27,6 +27,13 @@ export interface EQState {
   high: number;
 }
 
+export interface FXState {
+  delay: { active: boolean; time: number; feedback: number; mix: number };
+  reverb: { active: boolean; roomSize: number; mix: number };
+  chorus: { active: boolean; rate: number; depth: number; mix: number };
+  phaser: { active: boolean; rate: number; depth: number; mix: number };
+}
+
 export interface ChannelState {
   id: string;
   name: string;
@@ -36,6 +43,10 @@ export interface ChannelState {
   mute: boolean;
   solo: boolean;
   eq: EQState;
+  fx: FXState;
+  pitchCorrection: number; // 0-1 amount
+  beatCorrection: number; // 0-1 amount
+  pulseRouting?: string[]; // Optional pulse tracks this channel is latched to
 }
 
 export interface PulseTrack {
@@ -51,6 +62,9 @@ export interface SequencerState {
   bpm: number;
   isPlaying: boolean;
   masterTick: number; // Internal high-resolution tick
+  tempoDriftEnabled: boolean;
+  masterTempoSourceId?: string; // Channel ID to track for BPM
+  masterVolume: number;
 }
 
 export interface RoutingSource {

@@ -30,10 +30,14 @@ import {
   Zap,
   ExternalLink,
   Maximize2,
-  Tv
+  Tv,
+  Clock,
+  Waves,
+  Disc,
+  Wind
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack } from './types';
+import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
@@ -102,13 +106,15 @@ const ImagingView = ({
   onUpdate, 
   onAdd, 
   channels,
-  activeSourceId
+  activeSourceId,
+  sequencer
 }: { 
   sources: VideoSource[], 
   onUpdate: (id: string, update: Partial<VideoSource>) => void, 
   onAdd: () => void, 
   channels: ChannelState[],
-  activeSourceId: string | null
+  activeSourceId: string | null,
+  sequencer: SequencerState
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -300,139 +306,142 @@ const ImagingView = ({
            </div>
 
             {sources.map(source => {
-             const isSelected = activeSourceId === source.id;
-             return (
-             <div 
-                key={source.id} 
-                id={`vis-config-${source.id}`}
-                className={`rounded-2xl p-5 border space-y-6 transition-colors group ${
-                  isSelected ? 'bg-primary/10 border-primary/50 shadow-[0_0_30px_rgba(56,189,248,0.15)]' : 'bg-surface-container-low/50 border-white/5 hover:bg-surface-container-low'
-                }`}
-             >
-               <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                     <Monitor className="w-5 h-5 text-primary" />
-                   </div>
-                   <div>
-                     <span className="font-headline text-xs font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
-                     <span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
-                   </div>
-                 </div>
-                 <button 
-                  onClick={() => onUpdate(source.id, { active: !source.active })}
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
-                 >
-                   <Layers className="w-4 h-4" />
-                 </button>
-               </div>
+              const isSelected = activeSourceId === source.id;
+              return (
+              <div 
+                 key={source.id} 
+                 id={`vis-config-${source.id}`}
+                 className={`rounded-2xl p-5 border space-y-6 transition-colors group ${
+                   isSelected ? 'bg-primary/10 border-primary/50 shadow-[0_0_30px_rgba(56,189,248,0.15)]' : 'bg-surface-container-low/50 border-white/5 hover:bg-surface-container-low'
+                 }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                      <Monitor className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <span className="font-headline text-xs font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
+                      <span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
+                    </div>
+                  </div>
+                  <button 
+                   onClick={() => onUpdate(source.id, { active: !source.active })}
+                   className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
+                  >
+                    <Layers className="w-4 h-4" />
+                  </button>
+                </div>
 
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
-                     <span>Opacity</span>
-                     <span className="text-primary">{Math.round(source.opacity * 100)}%</span>
-                   </div>
-                   <input 
-                     type="range" min="0" max="1" step="0.01" value={source.opacity}
-                     onChange={e => onUpdate(source.id, { opacity: parseFloat(e.target.value) })}
-                     className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
-                   />
-                 </div>
-                 <div className="space-y-2">
-                   <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
-                     <span>Scale</span>
-                     <span className="text-primary">{Math.round(source.scale * 100)}%</span>
-                   </div>
-                   <input 
-                     type="range" min="0.1" max="3" step="0.01" value={source.scale}
-                     onChange={e => onUpdate(source.id, { scale: parseFloat(e.target.value) })}
-                     className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
-                   />
-                 </div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <div className="font-headline text-[9px] text-outline uppercase tracking-wider">X Position</div>
+                    <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
+                      <span>Opacity</span>
+                      <span className="text-primary">{Math.round(source.opacity * 100)}%</span>
+                    </div>
                     <input 
-                      type="range" min="-1" max="1" step="0.01" value={source.position.x}
-                      onChange={e => onUpdate(source.id, { position: { ...source.position, x: parseFloat(e.target.value) } })}
-                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                      type="range" min="0" max="1" step="0.01" value={source.opacity}
+                      onChange={e => onUpdate(source.id, { opacity: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
                     />
                   </div>
                   <div className="space-y-2">
-                    <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Y Position</div>
+                    <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
+                      <span>Scale</span>
+                      <span className="text-primary">{Math.round(source.scale * 100)}%</span>
+                    </div>
                     <input 
-                      type="range" min="-1" max="1" step="0.01" value={source.position.y}
-                      onChange={e => onUpdate(source.id, { position: { ...source.position, y: parseFloat(e.target.value) } })}
-                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                      type="range" min="0.1" max="3" step="0.01" value={source.scale}
+                      onChange={e => onUpdate(source.id, { scale: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
                     />
                   </div>
-               </div>
+                </div>
 
-               <div className="space-y-2">
-                 <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Spectral Blend Mode</div>
-                 <select 
-                   value={source.blendMode}
-                   onChange={e => onUpdate(source.id, { blendMode: e.target.value })}
-                   className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
-                 >
-                   <optgroup label="Standard" className="bg-surface-container">
-                    <option value="source-over">Normal</option>
-                    <option value="screen">Screen</option>
-                    <option value="multiply">Multiply</option>
-                    <option value="overlay">Overlay</option>
-                   </optgroup>
-                   <optgroup label="Spectral / Color" className="bg-surface-container">
-                    <option value="additive">Additive (Glow)</option>
-                    <option value="subtractive">Subtractive (Difference)</option>
-                    <option value="exclusion">Exclusion</option>
-                    <option value="hue">Hue Spectral</option>
-                    <option value="color">Full Color</option>
-                    <option value="luminosity">Luminance Isolation</option>
-                    <option value="color-dodge">Color Dodge</option>
-                   </optgroup>
-                 </select>
-               </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                     <div className="font-headline text-[9px] text-outline uppercase tracking-wider">X Position</div>
+                     <input 
+                       type="range" min="-1" max="1" step="0.01" value={source.position.x}
+                       onChange={e => onUpdate(source.id, { position: { ...source.position, x: parseFloat(e.target.value) } })}
+                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Y Position</div>
+                     <input 
+                       type="range" min="-1" max="1" step="0.01" value={source.position.y}
+                       onChange={e => onUpdate(source.id, { position: { ...source.position, y: parseFloat(e.target.value) } })}
+                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                     />
+                   </div>
+                </div>
 
-               <div className="space-y-2">
-                 <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Pulse Routing Latch</div>
-                 <select 
-                   multiple
-                   value={source.pulseRouting || []}
-                   onChange={e => {
-                     const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
-                     onUpdate(source.id, { pulseRouting: vals });
-                   }}
-                   className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-2 text-[10px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider min-h-[60px]"
-                 >
-                   <option value="trk-1" className="p-1">ALPHA_PULSE [Trk 1]</option>
-                   <option value="trk-2" className="p-1">BETA_KICK [Trk 2]</option>
-                   <option value="trk-3" className="p-1">GAMMA_SUB [Trk 3]</option>
-                 </select>
-                 <div className="text-[8px] text-outline mt-1 font-mono uppercase leading-tight">Cmd/Ctrl-Click to multi-select. Select none to UNLATCH.</div>
-               </div>
+                <div className="space-y-2">
+                  <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Spectral Blend Mode</div>
+                  <select 
+                    value={source.blendMode}
+                    onChange={e => onUpdate(source.id, { blendMode: e.target.value })}
+                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
+                  >
+                    <optgroup label="Standard" className="bg-surface-container">
+                     <option value="source-over">Normal</option>
+                     <option value="screen">Screen</option>
+                     <option value="multiply">Multiply</option>
+                     <option value="overlay">Overlay</option>
+                    </optgroup>
+                    <optgroup label="Spectral / Color" className="bg-surface-container">
+                     <option value="additive">Additive (Glow)</option>
+                     <option value="subtractive">Subtractive (Difference)</option>
+                     <option value="exclusion">Exclusion</option>
+                     <option value="hue">Hue Spectral</option>
+                     <option value="color">Full Color</option>
+                     <option value="luminosity">Luminance Isolation</option>
+                     <option value="color-dodge">Color Dodge</option>
+                    </optgroup>
+                  </select>
+                </div>
 
-               <div className="space-y-2">
-                 <div className="flex items-center gap-2 font-headline text-[9px] text-outline uppercase tracking-wider">
-                   <Volume2 className="w-3 h-3 text-primary" />
-                   <span>Audio Routing Bus</span>
-                 </div>
-                 <select 
-                   value={source.audioChannelId || ''}
-                   onChange={e => onUpdate(source.id, { audioChannelId: e.target.value })}
-                   className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
-                 >
-                   <option value="">NO_ROUTING</option>
-                   {channels.map(ch => (
-                     <option key={ch.id} value={ch.id}>OUTPUT: {ch.name}</option>
-                   ))}
-                 </select>
-               </div>
-             </div>
-           );
-           })}
+                <div className="space-y-2">
+                  <div className="font-headline text-[9px] text-outline uppercase tracking-wider flex justify-between">
+                    <span>Pulse Routing Latch</span>
+                    {source.pulseRouting && source.pulseRouting.length > 0 && <span className="text-primary animate-pulse font-black text-[7px]">FILTERED_SIGNAL</span>}
+                  </div>
+                  <select 
+                    multiple
+                    value={source.pulseRouting || []}
+                    onChange={e => {
+                      const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
+                      onUpdate(source.id, { pulseRouting: vals });
+                    }}
+                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-2 text-[10px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider min-h-[80px] custom-scrollbar focus:ring-1 focus:ring-primary/40"
+                  >
+                    {sequencer.tracks.map(t => (
+                      <option key={t.id} value={t.id} className="p-1">{t.name} [{t.id.toUpperCase()}]</option>
+                    ))}
+                  </select>
+                  <div className="text-[8px] text-outline mt-1 font-mono uppercase leading-tight">Cmd/Ctrl-Click to multi-select. Select none to UNLATCH.</div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 font-headline text-[9px] text-outline uppercase tracking-wider">
+                    <Volume2 className="w-3 h-3 text-primary" />
+                    <span>Audio Routing Bus</span>
+                  </div>
+                  <select 
+                    value={source.audioChannelId || ''}
+                    onChange={e => onUpdate(source.id, { audioChannelId: e.target.value })}
+                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
+                  >
+                    <option value="">NO_ROUTING</option>
+                    {channels.map(ch => (
+                      <option key={ch.id} value={ch.id}>OUTPUT: {ch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+            })}
 
            {sources.length === 0 && (
              <div className="py-20 text-center text-outline">
@@ -527,7 +536,9 @@ const ConsoleView = ({
   crossoverGates,
   toggleCrossoverGate,
   onTranscribe,
-  isTranscribing
+  isTranscribing,
+  sequencer,
+  setSequencer
 }: { 
   channels: ChannelState[], 
   updateChannel: (id: string, state: Partial<ChannelState>) => void, 
@@ -536,7 +547,9 @@ const ConsoleView = ({
   crossoverGates: CrossoverState,
   toggleCrossoverGate: (gate: keyof CrossoverState) => void,
   onTranscribe: () => void,
-  isTranscribing: boolean
+  isTranscribing: boolean,
+  sequencer: SequencerState,
+  setSequencer: React.Dispatch<React.SetStateAction<SequencerState>>
 }) => {
   const mixerCanvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -590,7 +603,25 @@ const ConsoleView = ({
              <span className="text-[8px] md:text-[9px] text-outline font-headline tracking-[0.2em] uppercase">Core Audio Mixing Engine</span>
            </div>
            
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-6">
+              {/* Master Volume Fader */}
+              <div className="flex flex-col items-center gap-1 bg-black/40 border border-white/5 px-4 py-1.5 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-3 h-3 text-primary" />
+                  <input 
+                    type="range" min="0" max="1.5" step="0.01" 
+                    value={sequencer.masterVolume}
+                    onChange={e => {
+                       const val = parseFloat(e.target.value);
+                       audioEngine.setMasterVolume(val);
+                       setSequencer(prev => ({ ...prev, masterVolume: val }));
+                    }}
+                    className="w-24 h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer"
+                  />
+                </div>
+                <span className="font-mono text-[7px] text-outline uppercase font-bold tracking-widest whitespace-nowrap">MASTER_OUT: {Math.round(sequencer.masterVolume * 100)}%</span>
+              </div>
+
               {/* Master Limiter LED */}
               <div className="flex bg-black/40 border border-white/5 px-3 py-1.5 rounded-full items-center gap-2 relative">
                 <span className="font-mono text-[8px] tracking-widest text-outline uppercase font-bold">BRICKWALL</span>
@@ -744,6 +775,72 @@ const ConsoleView = ({
                   SOLO
                 </button>
               </div>
+
+                {/* Pulse Latch */}
+                <div className="z-10 bg-black/20 p-2 rounded-xl border border-white/5 flex flex-col gap-1">
+                  <div className="font-headline text-[7px] text-outline uppercase tracking-wider flex justify-between">
+                    <span>SIGNAL_GATE</span>
+                    {channel.pulseRouting && channel.pulseRouting.length > 0 && <span className="text-primary animate-pulse font-black">QUANTIZED</span>}
+                  </div>
+                  <select 
+                    multiple
+                    value={channel.pulseRouting || []}
+                    onChange={e => {
+                      const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
+                      updateChannel(channel.id, { pulseRouting: vals });
+                    }}
+                    className="w-full bg-transparent border-none text-[8px] text-white outline-none cursor-pointer font-mono uppercase tracking-tighter min-h-[40px] custom-scrollbar focus:ring-0"
+                  >
+                    {sequencer.tracks.map(t => (
+                      <option key={t.id} value={t.id} className="py-0.5">{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* FX Shortcut Bar */}
+                <div className="z-10 bg-black/40 p-2 rounded-xl border border-white/5 flex justify-around">
+                   {[
+                     { id: 'delay' as const, icon: Clock, label: 'DLY' },
+                     { id: 'reverb' as const, icon: Waves, label: 'RVB' },
+                     { id: 'chorus' as const, icon: Disc, label: 'CHO' },
+                     { id: 'phaser' as const, icon: Wind, label: 'PHS' }
+                   ].map(fx => (
+                     <button
+                       key={fx.id}
+                       onClick={() => {
+                          const current = channel.fx[fx.id];
+                          updateChannel(channel.id, { 
+                            fx: { ...channel.fx, [fx.id]: { ...current, active: !current.active } } 
+                          });
+                       }}
+                       title={fx.label}
+                       className={`p-1.5 rounded-md transition-all flex flex-col items-center gap-0.5 ${channel.fx[fx.id].active ? 'bg-primary text-on-primary shadow-[0_0_8px_#38bdf8]' : 'bg-white/5 text-outline opacity-40 hover:opacity-100'}`}
+                     >
+                        <fx.icon className="w-3 h-3" />
+                        <span className="text-[6px] font-black">{fx.label}</span>
+                     </button>
+                   ))}
+                </div>
+
+                {/* Detailed FX Controls (mini) */}
+                <div className="z-10 grid grid-cols-2 gap-2 bg-surface-container-lowest/30 p-2 rounded-xl">
+                   <div className="flex flex-col gap-1">
+                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">Pitch_Corr</div>
+                      <input 
+                        type="range" min="0" max="1" step="0.01" value={channel.pitchCorrection}
+                        onChange={e => updateChannel(channel.id, { pitchCorrection: parseFloat(e.target.value) })}
+                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer"
+                      />
+                   </div>
+                   <div className="flex flex-col gap-1">
+                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">Beat_Corr</div>
+                      <input 
+                        type="range" min="0" max="1" step="0.01" value={channel.beatCorrection}
+                        onChange={e => updateChannel(channel.id, { beatCorrection: parseFloat(e.target.value) })}
+                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer"
+                      />
+                   </div>
+                </div>
             </div>
           ))}
         </div>
@@ -846,13 +943,17 @@ const PulseView = ({
   activeSteps,
   onUpdateTrack, 
   onBpmChange, 
-  onTogglePlay 
+  onTogglePlay,
+  onUpdateSequencer,
+  channels
 }: { 
   state: SequencerState, 
   activeSteps: {[key: string]: number},
   onUpdateTrack: (trackId: string, updates: Partial<PulseTrack>) => void, 
   onBpmChange: (bpm: number) => void, 
-  onTogglePlay: () => void 
+  onTogglePlay: () => void,
+  onUpdateSequencer: (updates: Partial<SequencerState>) => void,
+  channels: ChannelState[]
 }) => {
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
@@ -884,6 +985,29 @@ const PulseView = ({
                    type="range" min="60" max="240" value={state.bpm} onChange={e => onBpmChange(parseInt(e.target.value))}
                    className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer"
                  />
+              </div>
+
+              {/* Tempo Drift Control */}
+              <div className="flex flex-col justify-center px-4 border-l border-white/10 w-48">
+                 <div className="flex justify-between items-center mb-1">
+                   <span className="font-headline text-[8px] text-outline tracking-widest uppercase">TEMPO_DRIFT</span>
+                   <button 
+                     onClick={() => onUpdateSequencer({ tempoDriftEnabled: !state.tempoDriftEnabled })}
+                     className={`w-6 h-3 rounded-full relative transition-all ${state.tempoDriftEnabled ? 'bg-primary' : 'bg-white/10'}`}
+                   >
+                     <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${state.tempoDriftEnabled ? 'right-0.5' : 'left-0.5'}`} />
+                   </button>
+                 </div>
+                 <select 
+                   value={state.masterTempoSourceId || ''}
+                   onChange={e => onUpdateSequencer({ masterTempoSourceId: e.target.value })}
+                   className="bg-transparent border-none text-[8px] text-outline uppercase font-mono outline-none"
+                 >
+                   <option value="">FOLLOW_INTERNAL</option>
+                   {channels.map(ch => (
+                     <option key={ch.id} value={ch.id}>FOLLOW: {ch.name}</option>
+                   ))}
+                 </select>
               </div>
            </div>
         </div>
@@ -1318,15 +1442,31 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('mixer');
   
   const [channels, setChannels] = useState<ChannelState[]>(() => {
+    const defaultFX: FXState = {
+      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+    };
+
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('extreamix_channels');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Migration: Ensure new fields exist
+        return parsed.map((ch: any) => ({
+          ...ch,
+          fx: ch.fx || defaultFX,
+          pitchCorrection: ch.pitchCorrection || 0,
+          beatCorrection: ch.beatCorrection || 0
+        }));
+      }
     }
     return [
-      { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-      { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-      { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
-      { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 } },
+      { id: 'ch-1', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'ch-2', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
     ];
   });
   const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
@@ -1393,8 +1533,11 @@ export default function App() {
       if (saved) {
          try {
            const parsed = JSON.parse(saved);
-           // Migration check
-           if (parsed.tracks) return parsed;
+           if (parsed.tracks) return {
+             ...parsed,
+             tempoDriftEnabled: parsed.tempoDriftEnabled || false,
+             masterVolume: parsed.masterVolume || 0.9
+           };
          } catch(e) {}
       }
     }
@@ -1406,7 +1549,9 @@ export default function App() {
       ],
       bpm: 120,
       isPlaying: false,
-      masterTick: 0
+      masterTick: 0,
+      tempoDriftEnabled: false,
+      masterVolume: 0.9
     };
   });
   
@@ -1567,15 +1712,22 @@ export default function App() {
       setSequencer(prev => ({ ...prev, isPlaying: false }));
       setPulseActiveSteps({});
     } else {
-      audioEngine.startSequencer(sequencer.bpm, sequencer.tracks);
+      audioEngine.startSequencer(
+        sequencer.bpm, 
+        sequencer.tracks, 
+        sequencer.tempoDriftEnabled, 
+        sequencer.masterTempoSourceId
+      );
       setSequencer(prev => ({ ...prev, isPlaying: true }));
     }
   };
 
   useEffect(() => {
-    audioEngine.onStep = (trackId, step) => {
+    audioEngine.onStep = (trackId, step, isActive) => {
       setPulseActiveSteps(prev => ({ ...prev, [trackId]: step }));
       
+      if (!isActive) return;
+
       // Update visual engine & state for latches
       let needsStateUpdate = false;
       videoEngine.getSources().forEach(source => {
@@ -1597,7 +1749,8 @@ export default function App() {
       let changed = false;
       videoEngine.getSources().forEach(source => {
         if (source.pulseOpacity > 0) {
-          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.05);
+          // Sharp decay to produce "filtered" strobe effect
+          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.2); 
           changed = true;
         }
       });
@@ -1618,6 +1771,7 @@ export default function App() {
     };
     videoEngine.onSelectSource = (id) => {
        setActiveVideoSourceId(id);
+       setCurrentView('vision');
     };
     return () => {
       videoEngine.onUpdateSource = undefined;
@@ -1664,7 +1818,15 @@ export default function App() {
           depth: 0,
           mute: true, // DEFAULT MUTE TO PREVENT FEEDBACK
           solo: false,
-          eq: { low: 0, mid: 0, high: 0 }
+          eq: { low: 0, mid: 0, high: 0 },
+          fx: {
+            delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+            reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+            chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+            phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+          },
+          pitchCorrection: 0,
+          beatCorrection: 0
         };
         setChannels(prev => [...prev, newChannel]);
         audioEngine.createChannel(newChannelId, newChannel);
@@ -1895,6 +2057,8 @@ export default function App() {
                   toggleCrossoverGate={toggleCrossoverGate}
                   onTranscribe={handleTranscribe}
                   isTranscribing={isTranscribing}
+                  sequencer={sequencer}
+                  setSequencer={setSequencer}
                 />
               )}
               {currentView === 'vision' && (
@@ -1904,6 +2068,7 @@ export default function App() {
                   onAdd={handleAddVideoSource} 
                   channels={channels} 
                   activeSourceId={activeVideoSourceId}
+                  sequencer={sequencer}
                 />
               )}
               {currentView === 'sequencer' && (
@@ -1918,6 +2083,8 @@ export default function App() {
                   }}
                   onBpmChange={(bpm) => setSequencer(prev => ({ ...prev, bpm }))}
                   onTogglePlay={handlePlay}
+                  onUpdateSequencer={(updates) => setSequencer(prev => ({ ...prev, ...updates }))}
+                  channels={channels}
                 />
               )}
               {currentView === 'routing' && (

@@ -1,29 +1,51 @@
 import { ChannelState, PulseTrack } from '../types';
 
+interface ChannelNodes { 
+  gain: GainNode; 
+  pulseGate: GainNode;
+  panner: PannerNode; 
+  analyser: AnalyserNode;
+  eqLow: BiquadFilterNode;
+  eqMid: BiquadFilterNode;
+  eqHigh: BiquadFilterNode;
+  delay: DelayNode;
+  delayGain: GainNode;
+  reverb: ConvolverNode;
+  reverbGain: GainNode;
+  chorus: DelayNode;
+  chorusLFO: OscillatorNode;
+  chorusGain: GainNode;
+  phaser: BiquadFilterNode[]; // Chain of all-pass filters
+  phaserLFO: OscillatorNode;
+  phaserGain: GainNode;
+  spectralCrossover?: BiquadFilterNode;
+  pulseRouting: string[];
+  pitchCorrection: number;
+  beatCorrection: number;
+  osc?: OscillatorNode;
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
-  private channels: Map<string, { 
-    gain: GainNode; 
-    panner: PannerNode; 
-    analyser: AnalyserNode;
-    eqLow: BiquadFilterNode;
-    eqMid: BiquadFilterNode;
-    eqHigh: BiquadFilterNode;
-    spectralCrossover?: BiquadFilterNode;
-  }> = new Map();
+  private channels: Map<string, ChannelNodes> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   
   private trackStates: Map<string, { currentStep: number, nextNoteTime: number }> = new Map();
   private tracks: PulseTrack[] = [];
+  private bpm: number = 120;
+  private tempoDriftEnabled: boolean = false;
+  private masterTempoSourceId?: string;
+  private lastTransientTime: number = 0;
+  private detectedBPM: number = 120;
   
   // Sequencer state
   private timerID: number | null = null;
   private lookahead: number = 25.0;
   private scheduleAheadTime: number = 0.1;
 
-  public onStep: (trackId: string, step: number) => void = () => {};
+  public onStep: (trackId: string, step: number, isActive: boolean) => void = () => {};
 
   public init() {
     if (this.ctx) return;
@@ -52,6 +74,56 @@ class AudioEngine {
     
     const gain = this.ctx.createGain();
     gain.gain.value = initialState.volume;
+
+    const pulseGate = this.ctx.createGain();
+    pulseGate.gain.value = (initialState.pulseRouting && initialState.pulseRouting.length > 0) ? 0 : 1;
+    
+    // FX Nodes
+    const delay = this.ctx.createDelay(2.0);
+    const delayGain = this.ctx.createGain();
+    const delayFeedback = this.ctx.createGain();
+    delayFeedback.gain.value = 0.5;
+    delay.connect(delayFeedback);
+    delayFeedback.connect(delay); // Loop
+
+    const chorus = this.ctx.createDelay(0.1);
+    const chorusLFO = this.ctx.createOscillator();
+    const chorusLFOGain = this.ctx.createGain();
+    const chorusGain = this.ctx.createGain();
+    chorusLFO.frequency.value = 0.5;
+    chorusLFOGain.gain.value = 0.002;
+    chorusLFO.connect(chorusLFOGain);
+    chorusLFOGain.connect(chorus.delayTime);
+    chorusLFO.start();
+
+    const phaserLFO = this.ctx.createOscillator();
+    const phaserLFOGain = this.ctx.createGain();
+    const phaserGain = this.ctx.createGain();
+    const phaserStages: BiquadFilterNode[] = [];
+    phaserLFO.frequency.value = 0.5;
+    phaserLFOGain.gain.value = 500;
+    phaserLFO.connect(phaserLFOGain);
+    for(let i=0; i<4; i++) {
+      const stage = this.ctx.createBiquadFilter();
+      stage.type = 'allpass';
+      stage.frequency.value = 1000;
+      phaserLFOGain.connect(stage.frequency);
+      phaserStages.push(stage);
+    }
+    phaserLFO.start();
+
+    const reverb = this.ctx.createConvolver();
+    const reverbGain = this.ctx.createGain();
+    // Generate simple impulse response
+    const sampleRate = this.ctx.sampleRate;
+    const length = sampleRate * 2;
+    const impulse = this.ctx.createBuffer(2, length, sampleRate);
+    for(let i=0; i<length; i++) {
+      const n = (length - i) / length;
+      impulse.getChannelData(0)[i] = (Math.random() * 2 - 1) * Math.pow(n, 2);
+      impulse.getChannelData(1)[i] = (Math.random() * 2 - 1) * Math.pow(n, 2);
+    }
+    reverb.buffer = impulse;
     
     // EQ Chain
     const eqLow = this.ctx.createBiquadFilter();
@@ -77,14 +149,38 @@ class AudioEngine {
     panner.refDistance = 1;
     panner.maxDistance = 10000;
     panner.rolloffFactor = 1;
-    panner.positionX.value = initialState.pan; // left-right
+    panner.positionX.value = initialState.pan; 
     panner.positionY.value = 0;
-    panner.positionZ.value = initialState.depth || 0; // front-back (depth)
+    panner.positionZ.value = initialState.depth || 0;
     
     const analyser = this.ctx.createAnalyser();
     analyser.fftSize = 64;
     
-    // Connect Chain: Source -> eqLow -> eqMid -> eqHigh -> Gain -> Panner -> Analyser -> Master
+    // Connections: Source -> PulseGate -> (Parallel FX) -> EQ -> Gain -> Panner -> Analyser -> Master
+    // For simplicity, we'll connect FX in parallel to the main dry signal
+    pulseGate.connect(eqLow);
+    
+    // Delay dry/wet
+    pulseGate.connect(delay);
+    delay.connect(delayGain);
+    delayGain.connect(eqLow);
+
+    // Chorus
+    pulseGate.connect(chorus);
+    chorus.connect(chorusGain);
+    chorusGain.connect(eqLow);
+
+    // Phaser
+    let lastPhaser = pulseGate as AudioNode;
+    phaserStages.forEach(s => { lastPhaser.connect(s); lastPhaser = s; });
+    lastPhaser.connect(phaserGain);
+    phaserGain.connect(eqLow);
+
+    // Reverb
+    pulseGate.connect(reverb);
+    reverb.connect(reverbGain);
+    reverbGain.connect(eqLow);
+
     eqLow.connect(eqMid);
     eqMid.connect(eqHigh);
     eqHigh.connect(gain);
@@ -92,7 +188,34 @@ class AudioEngine {
     panner.connect(analyser);
     analyser.connect(this.masterGain);
     
-    this.channels.set(id, { gain, panner, analyser, eqLow, eqMid, eqHigh });
+    this.channels.set(id, { 
+      gain, 
+      pulseGate,
+      panner, 
+      analyser, 
+      eqLow, 
+      eqMid, 
+      eqHigh,
+      delay,
+      delayGain,
+      reverb,
+      reverbGain,
+      chorus,
+      chorusLFO,
+      chorusGain,
+      phaser: phaserStages,
+      phaserLFO,
+      phaserGain,
+      pulseRouting: initialState.pulseRouting || [],
+      pitchCorrection: initialState.pitchCorrection || 0,
+      beatCorrection: initialState.beatCorrection || 0
+    });
+  }
+
+  public setMasterVolume(v: number) {
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+    }
   }
 
   public updateChannel(id: string, state: Partial<ChannelState>) {
@@ -102,6 +225,33 @@ class AudioEngine {
     if (state.volume !== undefined) {
       channel.gain.gain.setTargetAtTime(state.mute ? 0 : state.volume, this.ctx.currentTime, 0.02);
     }
+    if (state.pulseRouting !== undefined) {
+      channel.pulseRouting = state.pulseRouting;
+      const targetGain = state.pulseRouting.length === 0 ? 1 : 0;
+      channel.pulseGate.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.01);
+    }
+    if (state.fx) {
+      const { delay, reverb, chorus, phaser } = state.fx;
+      if (delay) {
+        channel.delay.delayTime.setTargetAtTime(delay.time, this.ctx.currentTime, 0.05);
+        channel.delayGain.gain.setTargetAtTime(delay.active ? delay.mix : 0, this.ctx.currentTime, 0.05);
+      }
+      if (reverb) {
+        channel.reverbGain.gain.setTargetAtTime(reverb.active ? reverb.mix : 0, this.ctx.currentTime, 0.05);
+      }
+      if (chorus) {
+        channel.chorusLFO.frequency.setTargetAtTime(chorus.rate * 5, this.ctx.currentTime, 0.05);
+        channel.chorusGain.gain.setTargetAtTime(chorus.active ? chorus.mix : 0, this.ctx.currentTime, 0.05);
+      }
+      if (phaser) {
+        channel.phaserLFO.frequency.setTargetAtTime(phaser.rate * 5, this.ctx.currentTime, 0.05);
+        channel.phaserGain.gain.setTargetAtTime(phaser.active ? phaser.mix : 0, this.ctx.currentTime, 0.05);
+      }
+    }
+
+    if (state.pitchCorrection !== undefined) channel.pitchCorrection = state.pitchCorrection;
+    if (state.beatCorrection !== undefined) channel.beatCorrection = state.beatCorrection;
+
     if (state.pan !== undefined) {
       channel.panner.positionX.setTargetAtTime(state.pan * 2, this.ctx.currentTime, 0.02);
     }
@@ -133,7 +283,7 @@ class AudioEngine {
       if (stream.getAudioTracks().length === 0) return;
       
       const source = this.ctx.createMediaStreamSource(stream);
-      source.connect(channel.gain);
+      source.connect(channel.pulseGate);
       
       if (sourceId) {
         this.activeStreamSources.set(sourceId, source);
@@ -178,11 +328,14 @@ class AudioEngine {
     osc.stop(time + 0.15);
   }
 
-  public startSequencer(bpm: number, tracks: PulseTrack[]) {
+  public startSequencer(bpm: number, tracks: PulseTrack[], tempoDriftEnabled?: boolean, masterTempoSourceId?: string) {
     if (!this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
     
     this.tracks = tracks;
+    this.bpm = bpm;
+    this.tempoDriftEnabled = tempoDriftEnabled || false;
+    this.masterTempoSourceId = masterTempoSourceId;
     this.trackStates.clear();
     
     const startTime = this.ctx.currentTime + 0.05;
@@ -206,6 +359,29 @@ class AudioEngine {
   private scheduler(bpm: number) {
     if (!this.ctx) return;
     
+    // Tempo Drift Logic
+    if (this.tempoDriftEnabled && this.masterTempoSourceId) {
+      const channel = this.channels.get(this.masterTempoSourceId);
+      if (channel) {
+        const buffer = new Uint8Array(channel.analyser.frequencyBinCount);
+        channel.analyser.getByteTimeDomainData(buffer);
+        let max = 0;
+        for(let i=0; i<buffer.length; i++) {
+          const v = Math.abs(buffer[i] - 128);
+          if (v > max) max = v;
+        }
+        
+        // Simple peak detector for "transients" to sync BPM
+        if (max > 40 && (this.ctx.currentTime - this.lastTransientTime) > 0.25) {
+          const interval = this.ctx.currentTime - this.lastTransientTime;
+          this.detectedBPM = 60 / interval;
+          // Smooth the drift
+          this.bpm = this.bpm * 0.95 + this.detectedBPM * 0.05;
+          this.lastTransientTime = this.ctx.currentTime;
+        }
+      }
+    }
+
     let hasScheduledAnything = false;
 
     this.tracks.forEach(track => {
@@ -223,8 +399,37 @@ class AudioEngine {
   }
 
   private scheduleNote(track: PulseTrack, step: number, time: number) {
-    this.onStep(track.id, step);
-    if (track.steps[step]) {
+    const isActive = track.steps[step];
+    this.onStep(track.id, step, isActive);
+    
+    if (isActive) {
+      // Audio Gating: find channels latched to this track
+      const secondsPerBeat = 60.0 / this.bpm;
+      const beatsPerStep = 4 / track.division;
+      const duration = beatsPerStep * secondsPerBeat;
+
+      this.channels.forEach(ch => {
+        if (ch.pulseRouting.includes(track.id)) {
+          // Trigger Gate with Beat Correction Scaling
+          const g = ch.pulseGate.gain;
+          const correction = ch.beatCorrection ?? 0;
+          const attack = 0.002 + (1 - correction) * 0.05;
+          const release = 0.002 + (1 - correction) * 0.05;
+
+          g.setValueAtTime(0, time);
+          g.linearRampToValueAtTime(1, time + attack);
+          g.setValueAtTime(1, Math.max(time + attack, time + duration - release));
+          g.linearRampToValueAtTime(0, time + duration);
+          
+          // Pitch Correction (Internal Synth only)
+          if (ch.osc) {
+             const cents = (ch.pitchCorrection ?? 0) * 100;
+             ch.osc.detune.setTargetAtTime(cents, time, 0.05);
+          }
+        }
+      });
+
+      // Internal Synth play
       const rootFreq = 55.0;
       const intervals = [0, 12, 7, 0, 3, 12, 7, 10];
       const freq = rootFreq * Math.pow(1.05946, intervals[step % intervals.length]);
