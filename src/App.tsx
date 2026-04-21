@@ -101,22 +101,20 @@ const NavItem = ({
 
 // --- Sub-Views ---
 
-const ImagingView = ({
-	sources,
-	onUpdate,
-	onAdd,
-	onRemove,
-	channels,
-	activeSourceId,
-	sequencer
-}: {
-	sources: VideoSource[],
-	onUpdate: (id: string, update: Partial<VideoSource>) => void,
-	onAdd: () => void,
-	onRemove: (id: string) => void,
-	channels: ChannelState[],
-	activeSourceId: string | null,
-	sequencer: SequencerState
+const ImagingView = ({ 
+  sources, 
+  onUpdate, 
+  onAdd, 
+  channels,
+  activeSourceId,
+  sequencer
+}: { 
+  sources: VideoSource[], 
+  onUpdate: (id: string, update: Partial<VideoSource>) => void, 
+  onAdd: () => void, 
+  channels: ChannelState[],
+  activeSourceId: string | null,
+  sequencer: SequencerState
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -319,32 +317,23 @@ const ImagingView = ({
                    isSelected ? 'bg-primary/10 shadow-[0_0_30px_rgba(56,189,248,0.15)] outline outline-2 outline-primary/20' : 'bg-surface-container-low/50 hover:bg-surface-container-low'
                  }`}
               >
-		<div className="flex items-center justify-between">
-			<div className="flex items-center gap-3">
-				<div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-					<Monitor className="w-5 h-5 text-primary" />
-				</div>
-				<div>
-					<span className="font-headline text-xs font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
-					<span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
-				</div>
-			</div>
-			<div className="flex gap-2">
-				<button
-					onClick={() => onRemove(source.id)}
-					className="w-8 h-8 rounded-xl flex items-center justify-center transition-all bg-error/10 text-error hover:bg-error/20 border border-error/20"
-					title="Remove source"
-				>
-					<Trash2 className="w-4 h-4" />
-				</button>
-				<button
-					onClick={() => onUpdate(source.id, { active: !source.active })}
-					className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
-				>
-					<Layers className="w-4 h-4" />
-				</button>
-			</div>
-		</div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                      <Monitor className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <span className="font-headline text-xs font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
+                      <span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
+                    </div>
+                  </div>
+                  <button 
+                   onClick={() => onUpdate(source.id, { active: !source.active })}
+                   className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
+                  >
+                    <Layers className="w-4 h-4" />
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1528,45 +1517,34 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
   
-	const CORE_CHANNEL_IDS = ['v-synth', 'drum-machine', 'ch-3', 'ch-4'];
+  const [channels, setChannels] = useState<ChannelState[]>(() => {
+    const defaultFX: FXState = {
+      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+    };
 
-	const [channels, setChannels] = useState<ChannelState[]>(() => {
-		const defaultFX: FXState = {
-			delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-			reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-			chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-			phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-		};
-
-		const defaultChannels = [
-			{ id: 'v-synth', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [] },
-			{ id: 'drum-machine', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [] },
-			{ id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [] },
-			{ id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [] },
-		];
-
-		if (typeof window !== 'undefined') {
-			const saved = localStorage.getItem('extreamix_channels');
-			if (saved) {
-				try {
-					const parsed = JSON.parse(saved);
-					const migrated = parsed
-						.filter((ch: any) => CORE_CHANNEL_IDS.includes(ch.id))
-						.map((ch: any) => ({
-							...ch,
-							fx: ch.fx || defaultFX,
-							pitchCorrection: ch.pitchCorrection || 0,
-							beatCorrection: ch.beatCorrection || 0,
-							pulseRouting: []
-						}));
-					if (migrated.length > 0) return migrated;
-				} catch (e) {
-					console.warn('Failed to parse saved channels, using defaults');
-				}
-			}
-		}
-		return defaultChannels;
-	});
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_channels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Migration: Ensure new fields exist
+        return parsed.map((ch: any) => ({
+          ...ch,
+          fx: ch.fx || defaultFX,
+          pitchCorrection: ch.pitchCorrection || 0,
+          beatCorrection: ch.beatCorrection || 0
+        }));
+      }
+    }
+    return [
+      { id: 'v-synth', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'drum-machine', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+    ];
+  });
   const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -1988,34 +1966,19 @@ export default function App() {
     }
   };
 
-	const updateVideoSource = (id: string, update: Partial<VideoSource>) => {
-		const existing = videoSources.find(s => s.id === id);
-		if (!existing) return;
+  const updateVideoSource = (id: string, update: Partial<VideoSource>) => {
+    const existing = videoSources.find(s => s.id === id);
+    if (!existing) return;
 
-		if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
-			if (update.audioChannelId) {
-				audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
-			}
-		}
+    if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
+      if (update.audioChannelId) {
+        audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
+      }
+    }
 
-		videoEngine.updateSource(id, update);
-		setVideoSources(videoEngine.getSources());
-	};
-
-	const removeVideoSource = (id: string) => {
-		const source = videoSources.find(s => s.id === id);
-		if (!source) return;
-
-		if (source.audioChannelId) {
-			setChannels(prev => prev.filter(ch => ch.id !== source.audioChannelId));
-		}
-
-		videoEngine.removeSource(id);
-		setVideoSources(videoEngine.getSources());
-		if (activeVideoSourceId === id) {
-			setActiveVideoSourceId(null);
-		}
-	};
+    videoEngine.updateSource(id, update);
+    setVideoSources(videoEngine.getSources());
+  };
 
   const toggleRoutingConnection = (sourceId: string, destinationId: string) => {
     setRoutingConnections(prev => {
@@ -2208,17 +2171,16 @@ export default function App() {
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col z-10 min-h-0"
             >
-		<div className={currentView === 'vision' ? 'flex-1 flex flex-col' : 'hidden'}>
-			<ImagingView
-				sources={videoSources}
-				onUpdate={updateVideoSource}
-				onAdd={handleAddVideoSource}
-				onRemove={removeVideoSource}
-				channels={channels}
-				activeSourceId={activeVideoSourceId}
-				sequencer={sequencer}
-			/>
-		</div>
+              <div className={currentView === 'vision' ? 'flex-1 flex flex-col' : 'hidden'}>
+                <ImagingView 
+                  sources={videoSources} 
+                  onUpdate={updateVideoSource} 
+                  onAdd={handleAddVideoSource} 
+                  channels={channels} 
+                  activeSourceId={activeVideoSourceId}
+                  sequencer={sequencer}
+                />
+              </div>
 
               {currentView === 'mixer' && (
                 <ConsoleView 

@@ -198,38 +198,34 @@ class VideoEngine {
     this.draggedSourceId = null;
   };
 
-	public addSource(stream: MediaStream, name: string): VideoSource {
-		const id = `v-${Date.now()}`;
-		const video = document.createElement('video');
-		video.srcObject = stream;
-		video.muted = true;
-		video.play();
+  public addSource(stream: MediaStream, name: string): VideoSource {
+    const id = `v-${Date.now()}`;
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    video.play();
 
-		let maxZ = 0;
-		this.sources.forEach(s => { if (s.zIndex > maxZ) maxZ = s.zIndex; });
+    let maxZ = 0;
+    this.sources.forEach(s => { if (s.zIndex > maxZ) maxZ = s.zIndex; });
 
-		const offsetIndex = this.sources.size;
-		const offsetX = (offsetIndex % 3 - 1) * 0.25;
-		const offsetY = (Math.floor(offsetIndex / 3) - 1) * 0.25;
+    const source: VideoSource = {
+      id,
+      name,
+      stream,
+      videoElement: video,
+      opacity: 1,
+      blendMode: 'source-over',
+      active: true,
+      position: { x: 0, y: 0 },
+      scale: 1,
+      zIndex: maxZ + 1,
+      pulseRouting: [],
+      pulseOpacity: 0
+    };
 
-		const source: VideoSource = {
-			id,
-			name,
-			stream,
-			videoElement: video,
-			opacity: 1,
-			blendMode: 'source-over',
-			active: true,
-			position: { x: offsetX, y: offsetY },
-			scale: 0.8,
-			zIndex: maxZ + 1,
-			pulseRouting: [],
-			pulseOpacity: 0
-		};
-
-		this.sources.set(id, source);
-		return source;
-	}
+    this.sources.set(id, source);
+    return source;
+  }
 
   public removeSource(id: string) {
     const source = this.sources.get(id);
