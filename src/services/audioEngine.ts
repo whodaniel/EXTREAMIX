@@ -39,7 +39,10 @@ interface MasterFXNodes {
   lowPass: BiquadFilterNode;
   midPass: BiquadFilterNode;
   highPass: BiquadFilterNode;
-  masterFilter: BiquadFilterNode; // For master sweeps
+  masterFilter: BiquadFilterNode; 
+  lowGate: GainNode;
+  midGate: GainNode;
+  highGate: GainNode;
 }
 
 class AudioEngine {
@@ -51,6 +54,11 @@ class AudioEngine {
   private channels: Map<string, ChannelNodes> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   
+  private crossoverRouting: Record<string, string[]> = {
+    'low': [],
+    'mid': [],
+    'high': []
+  };
   private trackStates: Map<string, { currentStep: number, nextNoteTime: number }> = new Map();
   private tracks: PulseTrack[] = [];
   private bpm: number = 120;
@@ -74,7 +82,12 @@ class AudioEngine {
   }
 
   public init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(err => console.error('Failed to resume audio on init:', err));
+      }
+      return;
+    }
     this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     this.masterGain = this.ctx.createGain();
@@ -151,9 +164,12 @@ class AudioEngine {
       chorus: m_chorus, chorusLFO: m_chorusLFO, chorusGain: m_chorusGain,
       phaser: m_phaserStages, phaserLFO: m_phaserLFO, phaserGain: m_phaserGain,
       lowPass: m_lowPass,
-      midPass: m_midPassHigh, // placeholder for mid chain
+      midPass: m_midPassHigh, 
       highPass: m_highPass,
-      masterFilter: m_masterFilter
+      masterFilter: m_masterFilter,
+      lowGate: m_lowGate,
+      midGate: m_midGate,
+      highGate: m_highGate
     };
 
     // Connections: MasterGain -> (Parallel Master FX) -> MasterFilter -> (Split Bands) -> Selector -> MasterLimiter
@@ -219,6 +235,41 @@ class AudioEngine {
 
   public getMasterAnalyser() {
     return this.masterAnalyser;
+  }
+
+  public removeChannel(id: string) {
+    const nodes = this.channels.get(id);
+    if (!nodes) return;
+
+    // Disconnect all nodes
+    nodes.gain.disconnect();
+    nodes.panner.disconnect();
+    nodes.eqLow.disconnect();
+    nodes.eqMid.disconnect();
+    nodes.eqHigh.disconnect();
+    nodes.delay.disconnect();
+    nodes.delayGain.disconnect();
+    if (nodes.reverb) nodes.reverbGain.disconnect();
+    nodes.chorus.disconnect();
+    try { nodes.chorusLFO.stop(); } catch(e) {}
+    nodes.chorusLFO.disconnect();
+    nodes.chorusGain.disconnect();
+    nodes.phaser.forEach(p => p.disconnect());
+    try { nodes.phaserLFO.stop(); } catch(e) {}
+    nodes.phaserLFO.disconnect();
+    nodes.phaserGain.disconnect();
+    if (nodes.spectralCrossover) nodes.spectralCrossover.disconnect();
+    if (nodes.osc) try { nodes.osc.stop(); } catch(e) {}
+
+    this.channels.delete(id);
+    
+    // Cleanup any active source associated with this channel
+    for (const [sourceId, node] of this.activeStreamSources.entries()) {
+      if (sourceId.includes(id)) {
+        node.disconnect();
+        this.activeStreamSources.delete(sourceId);
+      }
+    }
   }
 
   public createChannel(id: string, initialState: ChannelState) {
@@ -391,6 +442,10 @@ class AudioEngine {
     }
   }
 
+  public updateCrossoverRouting(band: 'low' | 'mid' | 'high', trackIds: string[]) {
+    this.crossoverRouting[band] = trackIds;
+  }
+
   public updateCrossover(state: { low200: boolean, mid1000: boolean, high3000: boolean }) {
     if (!this.masterFX || !this.ctx) return;
     const mfx = this.masterFX as any;
@@ -517,7 +572,9 @@ class AudioEngine {
 
   public startSequencer(bpm: number, tracks: PulseTrack[], tempoDriftEnabled?: boolean, masterTempoSourceId?: string) {
     if (!this.ctx) return;
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(err => console.error('Failed to resume audio on sequence start:', err));
+    }
     
     this.tracks = tracks;
     this.bpm = bpm;
@@ -540,6 +597,25 @@ class AudioEngine {
     if (this.timerID) {
       clearTimeout(this.timerID);
       this.timerID = null;
+    }
+  }
+
+  public updateTracks(tracks: PulseTrack[]) {
+    this.tracks = tracks;
+    tracks.forEach(track => {
+      if (!this.trackStates.has(track.id)) {
+        this.trackStates.set(track.id, {
+          currentStep: 0,
+          nextNoteTime: this.ctx?.currentTime || 0
+        });
+      }
+    });
+
+    const activeIds = new Set(tracks.map(t => t.id));
+    for (const key of Array.from(this.trackStates.keys())) {
+      if (!activeIds.has(key)) {
+        this.trackStates.delete(key);
+      }
     }
   }
 
@@ -600,7 +676,7 @@ class AudioEngine {
       const duration = beatsPerStep * secondsPerBeat;
 
       this.channels.forEach(ch => {
-        if (ch.pulseRouting.includes(track.id)) {
+        if (ch.pulseRouting && ch.pulseRouting.includes(track.id)) {
           // Trigger Gate with Beat Correction Scaling
           const g = ch.pulseGate.gain;
           const correction = ch.beatCorrection ?? 0;
@@ -611,23 +687,30 @@ class AudioEngine {
           g.linearRampToValueAtTime(1, time + attack);
           g.setValueAtTime(1, Math.max(time + attack, time + duration - release));
           g.linearRampToValueAtTime(0, time + duration);
-          
-          // Pitch Correction (Internal Synth only)
-          if (ch.osc) {
-             const cents = (ch.pitchCorrection ?? 0) * 100;
-             ch.osc.detune.setTargetAtTime(cents, time, 0.05);
-          }
         }
       });
 
-      // Internal Synth play
-      const rootFreq = 55.0;
-      const intervals = [0, 12, 7, 0, 3, 12, 7, 10];
-      const freq = rootFreq * Math.pow(1.05946, intervals[step % intervals.length]);
-      // Vary base frequency if we have multiple tracks
-      const tFreq = freq * (1 + (parseInt(track.id.replace(/\D/g,'')) % 3) * 0.5);
-      this.playSynth(time, isNaN(tFreq) ? freq : tFreq);
+      // Global Crossover Gate Pulse Routing (The "Matrix of Filters")
+      if (this.masterFX) {
+        if (track.targetFilter === 'LOW_BAND') this.pulseGlobalFilter('low', time, duration);
+        if (track.targetFilter === 'MID_BAND') this.pulseGlobalFilter('mid', time, duration);
+        if (track.targetFilter === 'HIGH_BAND') this.pulseGlobalFilter('high', time, duration);
+
+        // Also check legacy routing
+        if (this.crossoverRouting['low'].includes(track.id)) this.pulseGlobalFilter('low', time, duration);
+        if (this.crossoverRouting['mid'].includes(track.id)) this.pulseGlobalFilter('mid', time, duration);
+        if (this.crossoverRouting['high'].includes(track.id)) this.pulseGlobalFilter('high', time, duration);
+      }
     }
+  }
+
+  private pulseGlobalFilter(band: 'low' | 'mid' | 'high', time: number, duration: number) {
+    if (!this.masterFX) return;
+    const gate = this.masterFX[`${band}Gate` as keyof MasterFXNodes] as GainNode;
+    gate.gain.setValueAtTime(0, time);
+    gate.gain.linearRampToValueAtTime(1, time + 0.005);
+    gate.gain.setValueAtTime(1, time + duration - 0.005);
+    gate.gain.linearRampToValueAtTime(0, time + duration);
   }
 
   private advanceNote(bpm: number, track: PulseTrack, state: { currentStep: number, nextNoteTime: number }) {

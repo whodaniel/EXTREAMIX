@@ -1,4 +1,4 @@
-export type View = 'mixer' | 'sequencer' | 'routing' | 'library' | 'vision';
+export type View = 'mixer' | 'filters' | 'routing' | 'library' | 'vision';
 
 export interface Point {
   x: number;
@@ -55,6 +55,7 @@ export interface PulseTrack {
   steps: boolean[];
   division: number; // Note division: 4 = 1/4 note, 8 = 1/8 note, 16 = 1/16, etc.
   length: number;
+  targetFilter?: 'LOW_BAND' | 'MID_BAND' | 'HIGH_BAND' | 'NONE';
 }
 
 export interface SequencerState {

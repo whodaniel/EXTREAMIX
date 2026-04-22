@@ -18,6 +18,7 @@ import {
   Monitor,
   Music,
   Plus,
+  RefreshCcw,
   Trash2,
   Volume2,
   Repeat,
@@ -26,6 +27,7 @@ import {
   Mic2,
   ChevronDown,
   Video,
+  Camera,
   Layers,
   Zap,
   ExternalLink,
@@ -104,17 +106,25 @@ const NavItem = ({
 const ImagingView = ({ 
   sources, 
   onUpdate, 
+  onRemove,
   onAdd, 
+  onAddCamera,
   channels,
   activeSourceId,
-  sequencer
+  sequencer,
+  cameraFacingMode,
+  setCameraFacingMode
 }: { 
   sources: VideoSource[], 
   onUpdate: (id: string, update: Partial<VideoSource>) => void, 
+  onRemove: (id: string) => void,
   onAdd: () => void, 
+  onAddCamera: () => void,
   channels: ChannelState[],
   activeSourceId: string | null,
-  sequencer: SequencerState
+  sequencer: SequencerState,
+  cameraFacingMode: 'user' | 'environment',
+  setCameraFacingMode: (mode: 'user' | 'environment') => void
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -166,6 +176,7 @@ const ImagingView = ({
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      videoEngine.stopRender();
     };
   }, []);
 
@@ -197,11 +208,11 @@ const ImagingView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto xl:overflow-hidden min-h-0 p-2 md:p-4 custom-scrollbar lg:pb-20 xl:pb-0">
+    <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-12 xl:pb-0">
       {/* Main Canvas Monitor */}
       <div 
         ref={containerRef}
-        className="flex-[3] min-h-[300px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
+        className="w-full xl:flex-[3] aspect-video xl:aspect-auto min-h-[250px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
       >
         <canvas 
           ref={canvasRef} 
@@ -223,6 +234,31 @@ const ImagingView = ({
            <button onClick={handleFullscreen} className="bg-white/10 hover:bg-white/20 text-white p-2 md:p-3 rounded-xl md:rounded-2xl border border-white/10 backdrop-blur-md transition-all active:scale-95">
              <Maximize2 className="w-4 h-4 md:w-5 md:h-5" />
            </button>
+           
+           <div className="flex bg-white/10 rounded-xl md:rounded-2xl border border-white/10 backdrop-blur-md overflow-hidden p-0.5">
+             <button 
+               onClick={() => setCameraFacingMode('user')} 
+               className={`px-3 py-1.5 md:p-2.5 rounded-lg transition-all flex flex-col items-center gap-0.5 ${cameraFacingMode === 'user' ? 'bg-primary text-on-primary-container' : 'text-white/40 hover:text-white'}`}
+               title="Switch to Front (Selfie) Camera"
+             >
+               <User className="w-3.5 h-3.5 md:w-4 md:h-4" />
+               <span className="text-[6px] font-black uppercase">Selfie</span>
+             </button>
+             <button 
+               onClick={() => setCameraFacingMode('environment')} 
+               className={`px-3 py-1.5 md:p-2.5 rounded-lg transition-all flex flex-col items-center gap-0.5 ${cameraFacingMode === 'environment' ? 'bg-primary text-on-primary-container' : 'text-white/40 hover:text-white'}`}
+               title="Switch to Back Camera"
+             >
+               <Monitor className="w-3.5 h-3.5 md:w-4 md:h-4" />
+               <span className="text-[6px] font-black uppercase">Back</span>
+             </button>
+             <div className="w-[1px] h-full bg-white/10 mx-0.5" />
+             <button onClick={onAddCamera} className="text-white hover:bg-white/10 px-4 md:px-5 transition-all active:scale-95 flex flex-col items-center justify-center gap-0.5" title="Add Camera Feed">
+               <Plus className="w-4 h-4 md:w-5 md:h-5 text-tertiary" />
+               <span className="text-[6px] font-black uppercase text-tertiary">Inject</span>
+             </button>
+           </div>
+
            <button onClick={onAdd} className="bg-tertiary hover:bg-white text-on-tertiary-container px-4 md:px-6 py-2 md:py-3 rounded-xl md:rounded-2xl font-headline font-black text-[10px] md:text-xs flex items-center gap-2 shadow-[0_20px_50px_rgba(86,229,169,0.3)] active:scale-95 transition-all uppercase tracking-widest">
              <Plus className="w-4 h-4" />
              <span className="hidden sm:inline">INJECT_FEED</span>
@@ -233,7 +269,7 @@ const ImagingView = ({
 
       {/* Control Panel */}
       <aside 
-        className="flex-1 bg-surface-container-high/60 backdrop-blur-2xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 overflow-y-auto xl:overflow-hidden min-h-0 custom-scrollbar shadow-2xl mt-4 xl:mt-0"
+        className="xl:flex-1 bg-surface-container-high/60 backdrop-blur-2xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 xl:overflow-y-auto min-h-0 custom-scrollbar shadow-2xl mt-4 xl:mt-0"
       >
         <div className="flex items-center justify-between sticky top-0 bg-surface-container-high/80 backdrop-blur-xl -mx-4 -mt-4 md:-mx-6 md:-mt-6 p-4 md:p-6 border-b border-white/5 z-20">
            <div>
@@ -243,7 +279,7 @@ const ImagingView = ({
            <Zap className="w-4 h-4 md:w-5 md:h-5 text-tertiary animate-pulse" />
         </div>
 
-        <div ref={scrollContainerRef} className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
+        <div ref={scrollContainerRef} className="space-y-6 xl:flex-1 xl:overflow-y-auto custom-scrollbar pr-1">
            {/* Interactions Help */}
            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3 md:p-4 text-[8px] md:text-[10px] text-primary/80 font-mono uppercase leading-relaxed tracking-wider">
               [DRAG] TO POSITION // [RESIZE_HANDLE] BOTTOM-RIGHT
@@ -327,12 +363,22 @@ const ImagingView = ({
                       <span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
                     </div>
                   </div>
-                  <button 
-                   onClick={() => onUpdate(source.id, { active: !source.active })}
-                   className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
-                  >
-                    <Layers className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                     onClick={() => onUpdate(source.id, { active: !source.active })}
+                     className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
+                     title={source.active ? "Deactivate Feed" : "Activate Feed"}
+                    >
+                      <Layers className="w-4 h-4" />
+                    </button>
+                    <button 
+                     onClick={() => onRemove(source.id)}
+                     className="w-8 h-8 rounded-xl flex items-center justify-center bg-error/10 text-error hover:bg-error hover:text-on-error border border-error/20 transition-all"
+                     title="Remove Feed Permanent"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -344,7 +390,7 @@ const ImagingView = ({
                     <input 
                       type="range" min="0" max="1" step="0.01" value={source.opacity}
                       onChange={e => onUpdate(source.id, { opacity: parseFloat(e.target.value) })}
-                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
+                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary touch-none"
                     />
                   </div>
                   <div className="space-y-2">
@@ -355,7 +401,7 @@ const ImagingView = ({
                     <input 
                       type="range" min="0.1" max="3" step="0.01" value={source.scale}
                       onChange={e => onUpdate(source.id, { scale: parseFloat(e.target.value) })}
-                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary"
+                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary touch-none"
                     />
                   </div>
                 </div>
@@ -366,7 +412,7 @@ const ImagingView = ({
                      <input 
                        type="range" min="-1" max="1" step="0.01" value={source.position.x}
                        onChange={e => onUpdate(source.id, { position: { ...source.position, x: parseFloat(e.target.value) } })}
-                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary touch-none"
                      />
                    </div>
                    <div className="space-y-2">
@@ -374,7 +420,7 @@ const ImagingView = ({
                      <input 
                        type="range" min="-1" max="1" step="0.01" value={source.position.y}
                        onChange={e => onUpdate(source.id, { position: { ...source.position, y: parseFloat(e.target.value) } })}
-                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary"
+                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary touch-none"
                      />
                    </div>
                 </div>
@@ -594,10 +640,10 @@ const ConsoleView = ({
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-y-auto xl:overflow-hidden min-h-0 p-2 md:p-4 custom-scrollbar">
+    <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-12 xl:pb-0">
       {/* Mixer Console Area */}
       <div 
-        className="flex-[2.5] bg-surface-container-high/20 backdrop-blur-3xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 overflow-hidden min-h-[400px] md:min-h-[500px] xl:min-h-0 shadow-2xl"
+        className="xl:flex-[2.5] bg-surface-container-high/20 backdrop-blur-3xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 xl:overflow-hidden min-h-[400px] md:min-h-[500px] xl:min-h-0 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-2">
            <div>
@@ -641,8 +687,14 @@ const ConsoleView = ({
               <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
               
               {/* Channel Header */}
-              <div className="flex flex-col items-center z-10">
-                <div className="font-headline text-[9px] text-outline tracking-[0.3em] mb-1 uppercase" aria-hidden="true">CH_{channel.id.split('-')[1] || '0'}</div>
+              <div className="flex flex-col items-center z-10 w-full px-2">
+                <div className="w-full flex justify-between items-center mb-1">
+                   <div className="font-headline text-[9px] text-outline tracking-[0.3em] uppercase" aria-hidden="true">CH_{channel.id.split('-')[1] || '0'}</div>
+                   <div className="flex gap-1">
+                     {(channel.fx.delay.active || channel.fx.reverb.active || channel.fx.chorus.active || channel.fx.phaser.active) && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" title="FX Active" />}
+                     {(channel.eq.low !== 0 || channel.eq.mid !== 0 || channel.eq.high !== 0) && <div className="w-1.5 h-1.5 rounded-full bg-tertiary" title="EQ Filtering Active" />}
+                   </div>
+                </div>
                 <h4 className="font-headline text-sm text-white font-black uppercase truncate w-full text-center glow-text">{channel.name}</h4>
               </div>
               
@@ -827,19 +879,19 @@ const ConsoleView = ({
                 {/* Detailed FX Controls (mini) */}
                 <div className="z-10 grid grid-cols-2 gap-2 bg-surface-container-lowest/30 p-2 rounded-xl">
                    <div className="flex flex-col gap-1">
-                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">Pitch_Corr</div>
+                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (P)</div>
                       <input 
                         type="range" min="0" max="1" step="0.01" value={channel.pitchCorrection}
                         onChange={e => updateChannel(channel.id, { pitchCorrection: parseFloat(e.target.value) })}
-                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer"
+                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
                       />
                    </div>
                    <div className="flex flex-col gap-1">
-                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">Beat_Corr</div>
+                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (B)</div>
                       <input 
                         type="range" min="0" max="1" step="0.01" value={channel.beatCorrection}
                         onChange={e => updateChannel(channel.id, { beatCorrection: parseFloat(e.target.value) })}
-                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer"
+                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
                       />
                    </div>
                 </div>
@@ -924,7 +976,7 @@ const ConsoleView = ({
 
       {/* Side Monitor Area */}
       <div 
-        className="flex-1 flex flex-col gap-6 overflow-y-auto xl:overflow-hidden min-h-0 z-20 custom-scrollbar mt-4 xl:mt-0"
+        className="xl:flex-1 flex flex-col gap-6 xl:overflow-y-auto min-h-0 z-20 custom-scrollbar mt-4 xl:mt-0"
       >
         {/* FFT Monitor & Crossovers */}
         <div className="min-h-[280px] bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 flex flex-col shadow-2xl relative overflow-hidden">
@@ -1010,11 +1062,12 @@ const ConsoleView = ({
           </div>
         </div>
       </div>
+      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
 
-const PulseView = ({ 
+const FilterMatrixView = ({ 
   state, 
   activeSteps,
   onUpdateTrack, 
@@ -1032,13 +1085,13 @@ const PulseView = ({
   channels: ChannelState[]
 }) => {
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-8">
         
         {/* Header & Transport */}
         <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6 border-b border-primary/20 pb-6">
            <div>
-             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">PULSE_SEQ_v3</h2>
+             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">FILTER_MATRIX</h2>
              <span className="font-headline text-[10px] text-outline tracking-[0.4em] uppercase font-bold">Multi-Resolution Quantization Matrix</span>
            </div>
            
@@ -1046,10 +1099,10 @@ const PulseView = ({
               <button 
                 onClick={onTogglePlay} 
                 className={`flex items-center gap-2 px-6 py-3 rounded-lg font-headline font-black tracking-widest text-[10px] uppercase transition-all ${
-                  state.isPlaying ? 'bg-error text-on-error shadow-[0_0_15px_#f87171] animate-pulse' : 'bg-surface-container-high text-white hover:bg-white hover:text-black'
+                  state.isPlaying ? 'bg-error text-on-error shadow-[0_0_15px_#f87171] animate-pulse' : 'bg-primary text-on-primary shadow-[0_0_15px_rgba(56,189,248,0.4)]'
                 }`}
               >
-                {state.isPlaying ? 'HALT_SEQ' : 'INITIATE'}
+                {state.isPlaying ? 'HALT_MATRIX' : 'SYNC_CLOCK'}
               </button>
               
               <div className="flex flex-col justify-center px-4 border-l border-white/10 w-32">
@@ -1095,42 +1148,41 @@ const PulseView = ({
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC41Ii8+PC9zdmc+')] opacity-20 pointer-events-none" />
                 
                 {/* Track Header */}
-                <div className="flex justify-between items-center z-10">
-                   <h3 className="font-headline font-black text-white px-2 tracking-[0.2em]">{track.name}</h3>
-                   <div className="flex items-center gap-2">
-                      <select 
-                        value={track.division}
-                        onChange={(e) => onUpdateTrack(track.id, { division: parseInt(e.target.value) })}
-                        className="bg-black/50 border border-white/10 text-white font-mono text-[10px] rounded p-1 outline-none focus:border-primary/50"
-                      >
-                         <option value="4">1/4</option>
-                         <option value="8">1/8</option>
-                         <option value="16">1/16</option>
-                         <option value="32">1/32</option>
-                         <option value="64">1/64</option>
-                         <option value="128">1/128</option>
-                      </select>
-                      <select 
-                        value={track.length}
-                        onChange={(e) => {
-                          const len = parseInt(e.target.value);
-                          const newSteps = [...track.steps];
-                          if (newSteps.length < len) {
-                             newSteps.push(...Array(len - newSteps.length).fill(false));
-                          } else {
-                             newSteps.length = len;
-                          }
-                          onUpdateTrack(track.id, { length: len, steps: newSteps });
-                        }}
-                        className="bg-black/50 border border-white/10 text-white font-mono text-[10px] rounded p-1 outline-none focus:border-primary/50"
-                      >
-                         <option value="4">4 Steps</option>
-                         <option value="8">8 Steps</option>
-                         <option value="16">16 Steps</option>
-                         <option value="32">32 Steps</option>
-                         <option value="64">64 Steps</option>
-                         <option value="128">128 Steps</option>
-                      </select>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 z-10">
+                   <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rotate-45 border ${track.targetFilter !== 'NONE' ? 'bg-tertiary border-tertiary shadow-[0_0_8px_#56e5a9]' : 'border-white/20'}`} />
+                      <h3 className="font-headline font-black text-white px-2 tracking-[0.2em] text-sm uppercase italic">{track.name}</h3>
+                   </div>
+                   
+                   <div className="flex items-center gap-4">
+                      <div className="flex flex-col gap-1">
+                         <span className="font-headline text-[7px] text-outline uppercase tracking-widest">Routing_Target</span>
+                         <select 
+                           value={track.targetFilter || 'NONE'}
+                           onChange={(e) => onUpdateTrack(track.id, { targetFilter: e.target.value as any })}
+                           className="bg-black/50 border border-white/10 text-white font-mono text-[9px] rounded p-1.5 outline-none focus:border-tertiary/50 uppercase"
+                         >
+                            <option value="NONE">SELECT_TARGET</option>
+                            <option value="LOW_BAND">MASTER_BAND (LOW)</option>
+                            <option value="MID_BAND">MASTER_BAND (MID)</option>
+                            <option value="HIGH_BAND">MASTER_BAND (HIGH)</option>
+                         </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                         <span className="font-headline text-[7px] text-outline uppercase tracking-widest text-right">Resolution</span>
+                         <select 
+                           value={track.division}
+                           onChange={(e) => onUpdateTrack(track.id, { division: parseInt(e.target.value) })}
+                           className="bg-black/50 border border-white/10 text-white font-mono text-[9px] rounded p-1.5 outline-none focus:border-primary/50 text-right"
+                         >
+                            <option value="4">1/4</option>
+                            <option value="8">1/8</option>
+                            <option value="16">1/16</option>
+                            <option value="32">1/32</option>
+                            <option value="64">1/64</option>
+                         </select>
+                      </div>
                    </div>
                 </div>
 
@@ -1179,6 +1231,7 @@ const PulseView = ({
            <span>MASTER_SYNC // QUARTZ</span>
         </div>
       </div>
+      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
@@ -1292,7 +1345,7 @@ const MatrixView = ({
   mappings: MatrixMapping[]
 }) => {
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem]">
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem]">
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
         
         {/* Header */}
@@ -1376,6 +1429,7 @@ const MatrixView = ({
            </button>
         </div>
       </div>
+      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
@@ -1387,7 +1441,7 @@ const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], on
 
   return (
     <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 bg-surface">
-      <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 p-4 md:p-8 pb-32 md:pb-8 overflow-y-auto custom-scrollbar">
         <div className="mb-6 md:mb-10 flex flex-col sm:flex-row gap-4 items-start sm:items-center sticky top-0 bg-surface/80 backdrop-blur-xl z-20 pb-4">
            <div className="flex-1 w-full bg-surface-container-low rounded-xl border border-white/5 flex items-center px-4 py-3 focus-within:ring-2 focus-within:ring-primary/50 transition-all group max-w-xl">
              <Settings className="w-5 h-5 text-outline mr-3 group-hover:text-primary transition-colors" aria-hidden="true" />
@@ -1468,6 +1522,7 @@ const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], on
            </div>
          )}
       </aside>
+      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
@@ -1539,13 +1594,10 @@ export default function App() {
       }
     }
     return [
-      { id: 'v-synth', name: 'V-Synth', volume: 0.7, pan: 0, depth: 0, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
-      { id: 'drum-machine', name: 'Drum Mach', volume: 0.8, pan: 0.2, depth: 0.1, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
-      { id: 'ch-3', name: 'Arp Bass', volume: 0.5, pan: -0.3, depth: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
-      { id: 'ch-4', name: 'Vocal Vox', volume: 0.6, pan: 0, depth: -0.2, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: defaultFX, pitchCorrection: 0, beatCorrection: 0 },
+      // Defaulting to 0 channels to prevent confusion about "extra tracks without inputs"
     ];
   });
-  const [transcripts, setTranscripts] = useState<string[]>(["Awaiting audio stream for speech recognition..."]);
+  const [transcripts, setTranscripts] = useState<string[]>(["[SYSTEM_DIAGNOSTIC] CORE_ENGINE_v4 initialized.", "[SYSTEM_DIAGNOSTIC] Audio Context: READY.", "[SYSTEM_DIAGNOSTIC] Video Buffer: SYNCED."]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
 
@@ -1627,9 +1679,10 @@ export default function App() {
     }
     return {
       tracks: [
-        { id: 'trk-1', name: 'ALPHA_PULSE', division: 16, length: 16, steps: [true, false, false, true, false, false, true, false, true, true, false, false, false, true, false, true] },
-        { id: 'trk-2', name: 'BETA_KICK', division: 4, length: 4, steps: [true, true, true, true] },
-        { id: 'trk-3', name: 'GAMMA_SUB', division: 8, length: 8, steps: [false, true, false, true, false, false, true, false] }
+        { id: 'low-band', name: 'BAND_LOW (200Hz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'LOW_BAND' },
+        { id: 'mid-band', name: 'BAND_MID (1kHz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'MID_BAND' },
+        { id: 'high-band', name: 'BAND_HIGH (3kHz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'HIGH_BAND' },
+        { id: 'aux-pulse', name: 'AUX_SIGNAL', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'NONE' }
       ],
       bpm: 120,
       isPlaying: false,
@@ -1703,6 +1756,7 @@ export default function App() {
 
   // Master Limiter state for LED feedback in Console
   const [masterLimiterActive, setMasterLimiterActive] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('environment');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1734,6 +1788,10 @@ export default function App() {
     }
   }, [matrixMappings]);
 
+  useEffect(() => {
+    audioEngine.updateTracks(sequencer.tracks);
+  }, [sequencer.tracks]);
+
   // Master Engine Sync
   useEffect(() => {
     audioEngine.setMasterVolume(sequencer.masterVolume);
@@ -1744,8 +1802,11 @@ export default function App() {
 
 
   useEffect(() => {
-    audioEngine.init();
-    channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+    // We only init if already launched (e.g. refresh after first launch)
+    if (isLaunched) {
+      audioEngine.init();
+      channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+    }
   }, []);
 
   const toggleCrossoverGate = (gate: keyof typeof crossoverGates) => {
@@ -1803,6 +1864,7 @@ export default function App() {
   };
 
   const handlePlay = () => {
+    audioEngine.init();
     if (sequencer.isPlaying) {
       audioEngine.stopSequencer();
       setSequencer(prev => ({ ...prev, isPlaying: false }));
@@ -1894,53 +1956,30 @@ export default function App() {
     };
   }, []);
 
-  const handleAddVideoSource = async () => {
+  const handleAddCameraSource = async () => {
     try {
-      let captureConfig: any = {
+      audioEngine.init();
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         video: {
-          displaySurface: "browser", // Prefer browser tabs for better control
-        },
-        audio: {
-          suppressLocalAudioPlayback: true,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        },
-        surfaceSwitching: "exclude",
-        selfBrowserSurface: "exclude",
-        monitorTypeSurfaces: "exclude",
-        preferCurrentTab: false
-      };
+          facingMode: cameraFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }, 
+        audio: true 
+      });
       
-      // @ts-ignore
-      let controller;
-      // @ts-ignore
-      if (window.CaptureController) {
-        // @ts-ignore
-        controller = new CaptureController();
-        // Force the browser to stay focused on the current app tab
-        controller.setFocusBehavior("no-focus-change");
-        captureConfig.controller = controller;
-      }
-
-      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
-      
-      // Secondary focus fallback - though browsers often throttle this, 
-      // calling it immediately after a success is most likely to succeed.
-      window.focus();
-      
-      const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
+      const source = videoEngine.addSource(stream, `Camera Feed ${videoSources.length + 1}`);
       
       const hasAudio = stream.getAudioTracks().length > 0;
       if (hasAudio) {
-        const newChannelId = `ch-vid-${Date.now()}`;
+        const newChannelId = `ch-cam-${Date.now()}`;
         const newChannel: ChannelState = {
           id: newChannelId,
-          name: `Feed ${videoSources.length + 1}`,
+          name: `Cam ${videoSources.length + 1}`,
           volume: 0.7,
           pan: 0,
           depth: 0,
-          mute: true, // DEFAULT MUTE TO PREVENT FEEDBACK
+          mute: true,
           solo: false,
           eq: { low: 0, mid: 0, high: 0 },
           fx: {
@@ -1959,9 +1998,66 @@ export default function App() {
       }
       
       setVideoSources(prev => [...prev, source]);
-      // Focus on the new source
       setActiveVideoSourceId(source.id);
     } catch (err) {
+      console.error('Failed to add camera source:', err);
+    }
+  };
+
+  const handleAddVideoSource = async () => {
+    try {
+      audioEngine.init();
+      // Basic check for mobile - getDisplayMedia is often restricted or buggy on mobile
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      let captureConfig: any = {
+        video: true,
+        audio: {
+          suppressLocalAudioPlayback: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      };
+
+      if (!isMobile) {
+        captureConfig.video = { displaySurface: "browser" };
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
+      
+      const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
+      
+      const hasAudio = stream.getAudioTracks().length > 0;
+      if (hasAudio) {
+        const newChannelId = `ch-vid-${Date.now()}`;
+        const newChannel: ChannelState = {
+          id: newChannelId,
+          name: `Feed ${videoSources.length + 1}`,
+          volume: 0.7,
+          pan: 0,
+          depth: 0,
+          mute: true,
+          solo: false,
+          eq: { low: 0, mid: 0, high: 0 },
+          fx: {
+            delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+            reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+            chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+            phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+          },
+          pitchCorrection: 0,
+          beatCorrection: 0
+        };
+        setChannels(prev => [...prev, newChannel]);
+        audioEngine.createChannel(newChannelId, newChannel);
+        source.audioChannelId = newChannelId;
+        audioEngine.routeStreamToChannel(stream, newChannelId, source.id);
+      }
+      
+      setVideoSources(prev => [...prev, source]);
+      setActiveVideoSourceId(source.id);
+    } catch (err: any) {
       console.error('Failed to add video source:', err);
     }
   };
@@ -1978,6 +2074,26 @@ export default function App() {
 
     videoEngine.updateSource(id, update);
     setVideoSources(videoEngine.getSources());
+  };
+
+  const removeVideoSource = (id: string) => {
+    const source = videoSources.find(s => s.id === id);
+    if (!source) return;
+
+    // Cleanup audio
+    if (source.audioChannelId) {
+      audioEngine.removeChannel(source.audioChannelId);
+      setChannels(prev => prev.filter(ch => ch.id !== source.audioChannelId));
+    }
+
+    // Stop and cleanup stream
+    if (source.stream) {
+      source.stream.getTracks().forEach(track => track.stop());
+    }
+
+    videoEngine.removeSource(id);
+    setVideoSources(videoEngine.getSources());
+    if (activeVideoSourceId === id) setActiveVideoSourceId(null);
   };
 
   const toggleRoutingConnection = (sourceId: string, destinationId: string) => {
@@ -2011,12 +2127,27 @@ export default function App() {
     return <ProjectorView />;
   }
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        audioEngine.init();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   if (!isLaunched) {
-    return <LandingPage onInitiate={() => setIsLaunched(true)} />;
+    return <LandingPage onInitiate={() => {
+      audioEngine.init();
+      setIsLaunched(true);
+      // Create initial channels after init
+      channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+    }} />;
   }
 
   return (
-    <div className="h-[100dvh] w-screen flex flex-col bg-surface overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-surface overflow-hidden">
       {/* Top Bar - Simplified for mobile */}
       <header className="h-14 md:h-16 flex-shrink-0 px-4 md:px-8 flex items-center justify-between bg-surface/80 backdrop-blur-xl border-b border-white/5 z-50">
         <div className="flex items-center gap-4 md:gap-12">
@@ -2081,16 +2212,16 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative min-h-0">
-        {/* Navigation - Bottom bar on mobile, Sidebar on desktop */}
-        <nav className="fixed bottom-0 left-0 right-0 h-16 md:h-auto bg-surface-container-high/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-around z-40 transition-all md:relative md:w-20 lg:w-24 md:flex-col md:border-t-0 md:border-r md:justify-start md:py-8 lg:p-0">
+      <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
+        {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}
+        <nav className="relative w-full h-16 flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-8 lg:p-0">
            <div className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4">
             <Music className="w-5 h-5 md:w-6 md:h-6 text-primary" />
           </div>
           <div className="flex md:flex-col w-full md:space-y-2 md:flex-1">
             <NavItem icon={SlidersHorizontal} label="Console" active={currentView === 'mixer'} onClick={() => setCurrentView('mixer')} />
             <NavItem icon={Video} label="Imaging" active={currentView === 'vision'} onClick={() => setCurrentView('vision')} />
-            <NavItem icon={LayoutGrid} label="Pulse" active={currentView === 'sequencer'} onClick={() => setCurrentView('sequencer')} />
+            <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
             <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'routing'} onClick={() => setCurrentView('routing')} />
             <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
           </div>
@@ -2102,12 +2233,13 @@ export default function App() {
         </nav>
 
         {/* Workspace */}
-        <main className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col p-2 md:p-6 lg:p-8 relative pb-20 md:pb-0 custom-scrollbar min-h-0">
-          <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
-            <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
-          </div>
+        <main className="flex-1 relative overflow-hidden">
+          <div className="absolute inset-0 flex flex-col p-2 md:p-6 lg:p-8 overflow-hidden z-10">
+            <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
+              <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
+            </div>
 
-          <AnimatePresence>
+            <AnimatePresence>
             {isSettingsOpen && (
               <motion.div 
                 initial={{ opacity: 0 }} 
@@ -2164,24 +2296,27 @@ export default function App() {
           
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentView === 'vision' ? 'vision' : 'other'}
+              key={currentView}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
-              className="flex-1 flex flex-col z-10 min-h-0"
+              className="flex-1 flex flex-col h-full overflow-hidden"
             >
-              <div className={currentView === 'vision' ? 'flex-1 flex flex-col' : 'hidden'}>
+              {currentView === 'vision' && (
                 <ImagingView 
                   sources={videoSources} 
                   onUpdate={updateVideoSource} 
+                  onRemove={removeVideoSource}
                   onAdd={handleAddVideoSource} 
+                  onAddCamera={handleAddCameraSource}
                   channels={channels} 
                   activeSourceId={activeVideoSourceId}
                   sequencer={sequencer}
+                  cameraFacingMode={cameraFacingMode}
+                  setCameraFacingMode={setCameraFacingMode}
                 />
-              </div>
-
+              )}
               {currentView === 'mixer' && (
                 <ConsoleView 
                   channels={channels} 
@@ -2196,8 +2331,8 @@ export default function App() {
                   setSequencer={setSequencer}
                 />
               )}
-              {currentView === 'sequencer' && (
-                <PulseView 
+              {currentView === 'filters' && (
+                <FilterMatrixView 
                   state={sequencer} 
                   activeSteps={pulseActiveSteps}
                   onUpdateTrack={(trackId, updates) => {
@@ -2225,6 +2360,7 @@ export default function App() {
               )}
             </motion.div>
           </AnimatePresence>
+          </div>
         </main>
       </div>
 

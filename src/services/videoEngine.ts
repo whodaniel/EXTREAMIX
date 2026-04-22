@@ -16,6 +16,7 @@ class VideoEngine {
   public onSelectSource?: (id: string) => void;
 
   public init(canvas: HTMLCanvasElement) {
+    if (this.animationId) this.stopRender();
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.startRender();
@@ -201,9 +202,10 @@ class VideoEngine {
   public addSource(stream: MediaStream, name: string): VideoSource {
     const id = `v-${Date.now()}`;
     const video = document.createElement('video');
+    video.setAttribute('playsinline', 'true');
     video.srcObject = stream;
     video.muted = true;
-    video.play();
+    video.play().catch(e => console.warn("Video failed to play:", e));
 
     let maxZ = 0;
     this.sources.forEach(s => { if (s.zIndex > maxZ) maxZ = s.zIndex; });

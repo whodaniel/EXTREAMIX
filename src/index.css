@@ -36,6 +36,14 @@
   --radius-full: 0.75rem;
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-on-surface);

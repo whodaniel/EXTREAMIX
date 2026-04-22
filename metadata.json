@@ -2,6 +2,7 @@
   "name": "EXTREAMIX",
   "description": "A high-performance command center for multi-stream audio-visual synthesis and routing.",
   "requestFramePermissions": [
+    "camera",
     "microphone",
     "display-capture"
   ],
