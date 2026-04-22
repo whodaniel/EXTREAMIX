@@ -158,6 +158,11 @@ class AudioEngine {
     m_masterFilter.type = 'lowpass';
     m_masterFilter.frequency.value = 20000;
 
+    // Split for Crossover - Define early to avoid ReferenceError in masterFX
+    const m_lowGate = this.ctx.createGain();
+    const m_midGate = this.ctx.createGain();
+    const m_highGate = this.ctx.createGain();
+
     this.masterFX = {
       delay: m_delay, delayGain: m_delayGain,
       reverb: m_reverb, reverbGain: m_reverbGain,
@@ -183,11 +188,6 @@ class AudioEngine {
 
     masterSum.connect(m_masterFilter);
 
-    // Split for Crossover
-    const m_lowGate = this.ctx.createGain();
-    const m_midGate = this.ctx.createGain();
-    const m_highGate = this.ctx.createGain();
-
     this.masterLimiter = this.ctx.createDynamicsCompressor();
     this.masterLimiter.threshold.setValueAtTime(-0.5, this.ctx.currentTime);
     this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
@@ -207,11 +207,6 @@ class AudioEngine {
     m_masterFilter.connect(m_highPass);
     m_highPass.connect(m_highGate);
     m_highGate.connect(this.masterLimiter);
-
-    // Store gates for quick access (internal use)
-    (this.masterFX as any).lowGate = m_lowGate;
-    (this.masterFX as any).midGate = m_midGate;
-    (this.masterFX as any).highGate = m_highGate;
 
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;

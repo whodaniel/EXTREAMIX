@@ -715,8 +715,8 @@ const ConsoleView = ({
                        type="range" min="0" max="1" step="0.01" value={channel.volume}
                        aria-label={`Volume for ${channel.name}`}
                        onChange={e => updateChannel(channel.id, { volume: parseFloat(e.target.value) })}
-                       className="h-full w-1 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical focus:ring-2 focus:ring-primary/50 cursor-pointer"
-                       style={{ WebkitAppearance: 'slider-vertical', touchAction: 'none' } as any}
+                        className="h-full w-1 appearance-none bg-surface-container-highest rounded-full accent-primary cursor-pointer focus:ring-2 focus:ring-primary/50"
+                        style={{ writingMode: 'vertical-lr', direction: 'rtl', touchAction: 'none' } as any}
                      />
                      <div className="mt-2 font-mono text-[8px] text-outline uppercase" aria-hidden="true">VOL</div>
                    </div>
@@ -920,8 +920,8 @@ const ConsoleView = ({
                            const val = parseFloat(e.target.value);
                            setSequencer(prev => ({ ...prev, masterVolume: val }));
                         }}
-                        className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary [writing-mode:bt-lr] -webkit-appearance-slider-vertical cursor-pointer"
-                        style={{ WebkitAppearance: 'slider-vertical' } as any}
+                        className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary cursor-pointer"
+                        style={{ writingMode: 'vertical-lr', direction: 'rtl' } as any}
                       />
                     </div>
                  </div>
