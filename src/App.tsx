@@ -208,7 +208,7 @@ const ImagingView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-12 xl:pb-0">
+    <div className="flex-1 flex flex-col xl:flex-row gap-4 md:gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-32 xl:pb-4">
       {/* Main Canvas Monitor */}
       <div 
         ref={containerRef}
@@ -640,7 +640,7 @@ const ConsoleView = ({
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-12 xl:pb-0">
+    <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-y-auto min-h-0 p-2 md:p-4 custom-scrollbar pb-32 xl:pb-4">
       {/* Mixer Console Area */}
       <div 
         className="xl:flex-[2.5] bg-surface-container-high/20 backdrop-blur-3xl rounded-3xl border border-white/10 p-4 md:p-6 flex flex-col gap-6 xl:overflow-hidden min-h-[400px] md:min-h-[500px] xl:min-h-0 shadow-2xl"
