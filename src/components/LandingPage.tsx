@@ -168,7 +168,10 @@ export const LandingPage = ({
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-primary mb-4">[STUDIO]</h3>
                 {packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly') ? (
                   <div className="font-headline text-4xl font-black text-white">
-                    {packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly').product.priceString}
+                    {(() => {
+                      const pkg = packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly');
+                      return pkg?.webBillingProduct?.currentPrice?.formattedPrice || pkg?.webBillingProduct?.defaultPurchaseOption?.basePrice?.formattedPrice || '$15.00';
+                    })()}
                     <span className="text-sm text-outline font-normal"> / MO</span>
                   </div>
                 ) : (
@@ -210,7 +213,10 @@ export const LandingPage = ({
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-tertiary mb-4">[BROADCAST]</h3>
                 {packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual') ? (
                   <div className="font-headline text-4xl font-black text-white">
-                    {packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual').product.priceString}
+                    {(() => {
+                      const pkg = packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual');
+                      return pkg?.webBillingProduct?.currentPrice?.formattedPrice || pkg?.webBillingProduct?.defaultPurchaseOption?.basePrice?.formattedPrice || '$49.00';
+                    })()}
                     <span className="text-sm text-outline font-normal"> / YR</span>
                   </div>
                 ) : (

@@ -5,8 +5,9 @@ const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || "test_ITxRpLmmpSGKy
 
 export const getOrCreateUserId = () => {
   let userId = localStorage.getItem('extreamix_rc_user_id');
-  if (!userId || userId === '[Not provided]') {
-    userId = crypto.randomUUID();
+  if (!userId || userId === '[Not provided]' || userId === 'null' || userId === 'undefined' || userId.length < 5) {
+    const fallbackId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `extreamix_user_${Math.random().toString(36).substring(2, 15)}`;
+    userId = fallbackId;
     localStorage.setItem('extreamix_rc_user_id', userId);
   }
   return userId;
@@ -14,11 +15,12 @@ export const getOrCreateUserId = () => {
 
 export const purchases = Purchases.configure({
   apiKey,
+  appUserId: getOrCreateUserId(),
 });
 
 export async function authenticateUser(userId: string) {
   try {
-    await purchases.logIn({ appUserId: userId });
+    await purchases.changeUser(userId);
   } catch (error) {
     console.error("Failed to log in to RevenueCat:", error);
   }
