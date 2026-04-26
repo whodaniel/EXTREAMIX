@@ -3,10 +3,6 @@ import { Purchases } from "@revenuecat/purchases-js";
 // Ensure this matches the key provided by the user
 const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || "test_ITxRpLmmpSGKyollhSyQTqPXMhP";
 
-export const purchases = Purchases.configure({
-  apiKey,
-});
-
 export const getOrCreateUserId = () => {
   let userId = localStorage.getItem('extreamix_rc_user_id');
   if (!userId) {
@@ -15,6 +11,11 @@ export const getOrCreateUserId = () => {
   }
   return userId;
 };
+
+export const purchases = Purchases.configure({
+  apiKey,
+  appUserId: getOrCreateUserId(),
+});
 
 export async function authenticateUser(userId: string) {
   try {
