@@ -2208,10 +2208,10 @@ export default function App() {
       packages={packages}
       isPro={isPro}
       isPurchasing={isPurchasing}
-      onPurchase={async (pkg) => {
+      onPurchase={async () => {
         try {
           setIsPurchasing(true);
-          const success = await handlePurchase(pkg);
+          const success = await handlePurchase();
           setIsPro(success);
           if (success) {
             audioEngine.init();

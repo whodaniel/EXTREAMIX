@@ -49,14 +49,12 @@ export function checkExtreamixProStatus(customerInfo: any) {
   }
 }
 
-export async function handlePurchase(selectedPackage: any) {
+export async function handlePurchase() {
   try {
-    // Triggers the web checkout flow
-    const { customerInfo } = await purchases.purchasePackage({
-      package: selectedPackage
+    const { customerInfo } = await purchases.presentPaywall({
+      htmlTarget: undefined // full screen overlay
     });
 
-    // Immediately verify if the purchase unlocked the correct entitlement
     return checkExtreamixProStatus(customerInfo);
   } catch (error: any) {
     if (!error.userCancelled) {

@@ -12,7 +12,7 @@ export const LandingPage = ({
   onInitiate: () => void;
   packages?: any[];
   isPro?: boolean;
-  onPurchase?: (pkg: any) => void;
+  onPurchase?: () => void;
   isPurchasing?: boolean;
 }) => {
   return (
@@ -191,9 +191,8 @@ export const LandingPage = ({
               ) : (
                 <button 
                   onClick={() => {
-                    const monthlyPkg = packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly');
-                    if (monthlyPkg && onPurchase) {
-                      onPurchase(monthlyPkg);
+                    if (onPurchase) {
+                      onPurchase();
                     } else {
                       onInitiate();
                     }
@@ -201,7 +200,7 @@ export const LandingPage = ({
                   disabled={isPurchasing}
                   className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
                  >
-                  {isPurchasing ? 'PROCESSING...' : 'UPGRADE TO STUDIO'}
+                  {isPurchasing ? 'PROCESSING...' : 'VIEW PLANS & UPGRADE'}
                  </button>
               )}
             </div>
@@ -236,9 +235,8 @@ export const LandingPage = ({
               ) : (
                 <button 
                   onClick={() => {
-                    const annualPkg = packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual');
-                    if (annualPkg && onPurchase) {
-                      onPurchase(annualPkg);
+                    if (onPurchase) {
+                      onPurchase();
                     } else {
                       onInitiate(); // Fallback
                     }
@@ -246,7 +244,7 @@ export const LandingPage = ({
                   disabled={isPurchasing}
                   className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
                  >
-                  {isPurchasing ? 'PROCESSING...' : 'GET ANNUAL ACCESS'}
+                  {isPurchasing ? 'PROCESSING...' : 'VIEW PLANS & UPGRADE'}
                  </button>
               )}
             </div>
