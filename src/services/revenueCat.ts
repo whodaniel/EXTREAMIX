@@ -5,8 +5,8 @@ const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || "test_ITxRpLmmpSGKy
 
 export const getOrCreateUserId = () => {
   let userId = localStorage.getItem('extreamix_rc_user_id');
-  if (!userId) {
-    userId = `extreamix_user_${Math.random().toString(36).substring(2, 15)}`;
+  if (!userId || userId === '[Not provided]') {
+    userId = crypto.randomUUID();
     localStorage.setItem('extreamix_rc_user_id', userId);
   }
   return userId;
@@ -14,7 +14,6 @@ export const getOrCreateUserId = () => {
 
 export const purchases = Purchases.configure({
   apiKey,
-  appUserId: getOrCreateUserId(),
 });
 
 export async function authenticateUser(userId: string) {
