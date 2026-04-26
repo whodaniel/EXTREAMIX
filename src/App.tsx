@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
+import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
@@ -1572,6 +1573,28 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
   
+  // RevenueCat State
+  const [isPro, setIsPro] = useState(false);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  useEffect(() => {
+    const initRC = async () => {
+      try {
+        const userId = getOrCreateUserId();
+        await authenticateUser(userId);
+        const isProStatus = await refreshCustomerStatus();
+        setIsPro(isProStatus);
+        const pkgs = await loadPaywallData();
+        setPackages(pkgs);
+      } catch (err) {
+        console.error("RC Init Error", err);
+      }
+    };
+    initRC();
+  }, []);
+
+  
   const [channels, setChannels] = useState<ChannelState[]>(() => {
     const defaultFX: FXState = {
       delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
@@ -2138,12 +2161,33 @@ export default function App() {
   }, []);
 
   if (!isLaunched) {
-    return <LandingPage onInitiate={() => {
-      audioEngine.init();
-      setIsLaunched(true);
-      // Create initial channels after init
-      channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
-    }} />;
+    return <LandingPage 
+      onInitiate={() => {
+        audioEngine.init();
+        setIsLaunched(true);
+        // Create initial channels after init
+        channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+      }} 
+      packages={packages}
+      isPro={isPro}
+      isPurchasing={isPurchasing}
+      onPurchase={async (pkg) => {
+        try {
+          setIsPurchasing(true);
+          const success = await handlePurchase(pkg);
+          setIsPro(success);
+          if (success) {
+            audioEngine.init();
+            setIsLaunched(true);
+            channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+          }
+        } catch(e) {
+          console.error("Purchase error", e);
+        } finally {
+          setIsPurchasing(false);
+        }
+      }}
+    />;
   }
 
   return (
@@ -2262,6 +2306,24 @@ export default function App() {
                   <h2 className="font-headline text-xl text-primary font-black uppercase tracking-widest mb-6 border-b border-white/10 pb-4">System configuration</h2>
                   
                   <div className="space-y-6">
+                    <div>
+                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Subscription & Access</h3>
+                      <button 
+                        disabled={isPurchasing}
+                        onClick={async () => {
+                          const url = await getManagementURL();
+                          if (url) {
+                            window.open(url, '_blank');
+                          } else {
+                            alert("Management URL not available yet. Please check again later or contact support.");
+                          }
+                        }}
+                        className="w-full py-3 px-4 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all mb-6"
+                      >
+                         MANAGE SUBSCRIPTION
+                      </button>
+                    </div>
+
                     <div>
                       <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Memory Allocation</h3>
                       <button 

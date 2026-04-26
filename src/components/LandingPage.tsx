@@ -2,7 +2,19 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Zap, Shield, Clock, Crosshair, Check, ChevronRight, Activity } from 'lucide-react';
 
-export const LandingPage = ({ onInitiate }: { onInitiate: () => void }) => {
+export const LandingPage = ({ 
+  onInitiate, 
+  packages = [], 
+  isPro = false, 
+  onPurchase,
+  isPurchasing = false 
+}: { 
+  onInitiate: () => void;
+  packages?: any[];
+  isPro?: boolean;
+  onPurchase?: (pkg: any) => void;
+  isPurchasing?: boolean;
+}) => {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-primary/30 overflow-x-hidden">
       {/* Background Pulse Simulation (120BPM = 500ms intervals) */}
@@ -154,7 +166,14 @@ export const LandingPage = ({ onInitiate }: { onInitiate: () => void }) => {
               <div className="mb-8">
                 <div className="font-mono text-[10px] text-primary/80 uppercase tracking-widest mb-2">The Professional Rig</div>
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-primary mb-4">[STUDIO]</h3>
-                <div className="font-headline text-4xl font-black text-white">$15 <span className="text-sm text-outline font-normal">/ MO</span></div>
+                {packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly') ? (
+                  <div className="font-headline text-4xl font-black text-white">
+                    {packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly').product.priceString}
+                    <span className="text-sm text-outline font-normal"> / MO</span>
+                  </div>
+                ) : (
+                  <div className="font-headline text-4xl font-black text-white">$15 <span className="text-sm text-outline font-normal">/ MO</span></div>
+                )}
               </div>
               <ul className="space-y-4 mb-12 flex-1 font-mono text-xs text-outline">
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> <span className="text-white">Everything in Pulse</span></li>
@@ -162,9 +181,26 @@ export const LandingPage = ({ onInitiate }: { onInitiate: () => void }) => {
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Dynamic MIDI Mapping</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Unlimited Registry Patches</li>
               </ul>
-              <button onClick={onInitiate} className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black">
-                ENGAGE
-              </button>
+              {isPro ? (
+                 <button onClick={onInitiate} className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black">
+                    ACCESS GRANTED // ENGAGE
+                 </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    const monthlyPkg = packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly');
+                    if (monthlyPkg && onPurchase) {
+                      onPurchase(monthlyPkg);
+                    } else {
+                      onInitiate();
+                    }
+                  }}
+                  disabled={isPurchasing}
+                  className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
+                 >
+                  {isPurchasing ? 'PROCESSING...' : 'UPGRADE TO STUDIO'}
+                 </button>
+              )}
             </div>
 
             {/* BROADCAST Tier */}
@@ -172,7 +208,14 @@ export const LandingPage = ({ onInitiate }: { onInitiate: () => void }) => {
               <div className="mb-8">
                 <div className="font-mono text-[10px] text-tertiary/80 uppercase tracking-widest mb-2">The Global Bridge</div>
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-tertiary mb-4">[BROADCAST]</h3>
-                <div className="font-headline text-4xl font-black text-white">$49 <span className="text-sm text-outline font-normal">/ MO</span></div>
+                {packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual') ? (
+                  <div className="font-headline text-4xl font-black text-white">
+                    {packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual').product.priceString}
+                    <span className="text-sm text-outline font-normal"> / YR</span>
+                  </div>
+                ) : (
+                  <div className="font-headline text-4xl font-black text-white">$49 <span className="text-sm text-outline font-normal">/ MO</span></div>
+                )}
               </div>
               <ul className="space-y-4 mb-12 flex-1 font-mono text-xs text-outline">
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> <span className="text-white">Everything in Studio</span></li>
@@ -180,9 +223,26 @@ export const LandingPage = ({ onInitiate }: { onInitiate: () => void }) => {
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> Multi-Stream RTMP Output</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> URL Media Injection</li>
               </ul>
-              <button className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black">
-                REQUEST ACCESS
-              </button>
+              {isPro ? (
+                 <button onClick={onInitiate} className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black">
+                    ACCESS GRANTED
+                 </button>
+              ) : (
+                <button 
+                  onClick={() => {
+                    const annualPkg = packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual');
+                    if (annualPkg && onPurchase) {
+                      onPurchase(annualPkg);
+                    } else {
+                      onInitiate(); // Fallback
+                    }
+                  }}
+                  disabled={isPurchasing}
+                  className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
+                 >
+                  {isPurchasing ? 'PROCESSING...' : 'GET ANNUAL ACCESS'}
+                 </button>
+              )}
             </div>
           </div>
         </section>
