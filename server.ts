@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import monetizationRoutes from "./src/routes/monetization.ts";
 import webhookRoutes from "./src/routes/webhooks.ts";
+import dnsRoutes from "./src/routes/dns.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,7 @@ async function startServer() {
 
   // API routes
   app.use('/api/monetization', monetizationRoutes);
+  app.use('/api/dns', dnsRoutes);
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });

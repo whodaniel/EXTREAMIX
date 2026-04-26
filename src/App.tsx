@@ -44,6 +44,8 @@ import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, r
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
+import { AdminDashboard } from './components/AdminDashboard';
+import { BroadcastView } from './components/BroadcastView';
 
 // --- Shared Components ---
 
@@ -1577,6 +1579,37 @@ export default function App() {
   const [isPro, setIsPro] = useState(false);
   const [packages, setPackages] = useState<any[]>([]);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  
+  // Subdomain Routing State
+  const [subdomain, setSubdomain] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. Check for preview simulation parameter (since AI Studio domains don't support wildcard testing out of the box)
+    const urlParams = new URLSearchParams(window.location.search);
+    const forcedSubdomain = urlParams.get('subdomain');
+    
+    if (forcedSubdomain) {
+      setSubdomain(forcedSubdomain);
+      return;
+    }
+
+    // 2. Real wildcard routing check
+    const hostname = window.location.hostname;
+    const parts = hostname.split('.');
+    
+    // Match something.extreamix.com
+    if (parts.length >= 3 && parts[parts.length - 2] === 'extreamix' && (parts[parts.length - 1] === 'com' || parts[parts.length - 1] === 'net')) {
+      if (parts[0] !== 'www') {
+        setSubdomain(parts[0]);
+      }
+    } 
+    // Match something.localhost (for local testing)
+    else if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+      if (parts[0] !== 'www') {
+        setSubdomain(parts[0]);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const initRC = async () => {
@@ -2160,6 +2193,10 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
+  if (subdomain) {
+    return <BroadcastView username={subdomain} />;
+  }
+
   if (!isLaunched) {
     return <LandingPage 
       onInitiate={() => {
@@ -2268,6 +2305,7 @@ export default function App() {
             <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
             <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'routing'} onClick={() => setCurrentView('routing')} />
             <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
+            <NavItem icon={Settings} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
           </div>
 
           <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full">
@@ -2419,6 +2457,9 @@ export default function App() {
                   presets={registryPresets}
                   onLoadPreset={loadPreset}
                 />
+              )}
+              {currentView === 'admin' && (
+                <AdminDashboard />
               )}
             </motion.div>
           </AnimatePresence>
