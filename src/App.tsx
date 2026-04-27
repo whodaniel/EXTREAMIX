@@ -46,6 +46,7 @@ import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { BroadcastView } from './components/BroadcastView';
+import { AdBanner } from './components/AdBanner';
 
 // --- Shared Components ---
 
@@ -2292,6 +2293,8 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {!isPro && <AdBanner />}
 
       <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
         {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}

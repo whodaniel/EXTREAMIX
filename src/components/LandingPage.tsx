@@ -146,15 +146,29 @@ export const LandingPage = ({
               <div className="mb-8">
                 <div className="font-mono text-[10px] text-outline/50 uppercase tracking-widest mb-2">The Core Loop</div>
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-white mb-4">[PULSE]</h3>
-                <div className="font-headline text-4xl font-black">$0 <span className="text-sm text-outline font-normal">/ FOREVER</span></div>
+                <div className="font-headline text-4xl font-black">$0 <span className="text-sm text-outline font-normal">/ AD-SUPPORTED</span></div>
               </div>
               <ul className="space-y-4 mb-12 flex-1 font-mono text-xs text-outline">
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Web Audio Matrix</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> 16-Step Sequencer</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Live Spectral Analysis</li>
+                <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Ad-Supported Access</li>
               </ul>
-              <button onClick={onInitiate} className="w-full py-4 border border-white/20 hover:bg-white/10 text-white font-headline text-xs uppercase tracking-widest transition-colors font-black">
-                ENGAGE
+              <button onClick={onInitiate} className="w-full py-4 border border-white/20 hover:bg-white/10 text-white font-headline text-xs uppercase tracking-widest transition-colors font-black mb-4">
+                ENGAGE FREE (ADS)
+              </button>
+              <button 
+                onClick={() => {
+                  if (onPurchase) {
+                    onPurchase();
+                  } else {
+                    onInitiate();
+                  }
+                }}
+                disabled={isPurchasing}
+                className="w-full py-4 bg-primary/20 hover:bg-primary/40 text-primary border border-primary/50 font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
+              >
+                {isPurchasing ? 'PROCESSING...' : 'REMOVE ADS ($2.99)'}
               </button>
             </div>
 

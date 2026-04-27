@@ -6,7 +6,7 @@ const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || "test_ITxRpLmmpSGKy
 export const getOrCreateUserId = () => {
   let userId = localStorage.getItem('extreamix_rc_user_id');
   if (!userId || userId === '[Not provided]' || userId === 'null' || userId === 'undefined' || userId.length < 5) {
-    const fallbackId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `extreamix_user_${Math.random().toString(36).substring(2, 15)}`;
+    const fallbackId = Purchases.generateRevenueCatAnonymousAppUserId();
     userId = fallbackId;
     localStorage.setItem('extreamix_rc_user_id', userId);
   }
