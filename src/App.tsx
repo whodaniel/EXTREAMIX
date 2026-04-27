@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
-import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL } from './services/revenueCat';
+import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL, EntitlementStatus } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
@@ -1591,7 +1591,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('mixer');
   
   // RevenueCat State
-  const [isPro, setIsPro] = useState(false);
+  const [entitlements, setEntitlements] = useState<EntitlementStatus>({ hasPulseUnlock: false, hasStudio: false, hasBroadcast: false, isPro: false });
+  const isPro = entitlements.isPro;
   const [packages, setPackages] = useState<any[]>([]);
   const [isPurchasing, setIsPurchasing] = useState(false);
   
@@ -1631,8 +1632,8 @@ export default function App() {
       try {
         const userId = getOrCreateUserId();
         await authenticateUser(userId);
-        const isProStatus = await refreshCustomerStatus();
-        setIsPro(isProStatus);
+        const status = await refreshCustomerStatus();
+        setEntitlements(status);
         const pkgs = await loadPaywallData();
         setPackages(pkgs);
       } catch (err) {
@@ -2221,14 +2222,14 @@ export default function App() {
         channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
       }} 
       packages={packages}
-      isPro={isPro}
+      entitlements={entitlements}
       isPurchasing={isPurchasing}
       onPurchase={async () => {
         try {
           setIsPurchasing(true);
           const success = await handlePurchase();
-          setIsPro(success);
-          if (success) {
+          setEntitlements(success);
+          if (success.isPro) {
             audioEngine.init();
             setIsLaunched(true);
             channels.forEach(ch => audioEngine.createChannel(ch.id, ch));

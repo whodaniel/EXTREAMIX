@@ -39,17 +39,31 @@ export async function loadPaywallData() {
   return [];
 }
 
-export function checkExtreamixProStatus(customerInfo: any) {
-  if (customerInfo && customerInfo.entitlements && customerInfo.entitlements.active["Extreamix Pro"]) {
-    console.log("Access Granted: Extreamix Pro features unlocked.");
-    return true;
-  } else {
-    console.log("User is on the free Pulse tier.");
-    return false;
-  }
+export interface EntitlementStatus {
+  hasPulseUnlock: boolean;
+  hasStudio: boolean;
+  hasBroadcast: boolean;
+  isPro: boolean;
 }
 
-export async function handlePurchase() {
+export function checkExtreamixProStatus(customerInfo: any): EntitlementStatus {
+  const active = customerInfo?.entitlements?.active || {};
+  
+  const hasPulseUnlock = !!(active["pulse_tier_unlocked"] || active["ad_free_access"] || active["Extreamix Pro"]);
+  const hasStudio = !!(active["studio_access"] || active["Extreamix Pro"]);
+  const hasBroadcast = !!(active["broadcast_access"] || active["Extreamix Pro"]);
+  const isPro = hasPulseUnlock || hasStudio || hasBroadcast;
+
+  if (isPro) {
+    console.log("Access Granted: Premium features unlocked.", { hasPulseUnlock, hasStudio, hasBroadcast });
+  } else {
+    console.log("User is on the free Pulse tier.");
+  }
+  
+  return { hasPulseUnlock, hasStudio, hasBroadcast, isPro };
+}
+
+export async function handlePurchase(): Promise<EntitlementStatus> {
   try {
     const { customerInfo } = await purchases.presentPaywall({
       htmlTarget: undefined // full screen overlay
@@ -64,13 +78,13 @@ export async function handlePurchase() {
   }
 }
 
-export async function refreshCustomerStatus() {
+export async function refreshCustomerStatus(): Promise<EntitlementStatus> {
   try {
     const customerInfo = await purchases.getCustomerInfo();
     return checkExtreamixProStatus(customerInfo);
   } catch (error) {
     console.error("Failed to retrieve customer info:", error);
-    return false;
+    return { hasPulseUnlock: false, hasStudio: false, hasBroadcast: false, isPro: false };
   }
 }
 
