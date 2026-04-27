@@ -39,31 +39,17 @@ export async function loadPaywallData() {
   return [];
 }
 
-export interface EntitlementStatus {
-  hasPulseUnlock: boolean;
-  hasStudio: boolean;
-  hasBroadcast: boolean;
-  isPro: boolean;
-}
-
-export function checkExtreamixProStatus(customerInfo: any): EntitlementStatus {
-  const active = customerInfo?.entitlements?.active || {};
-  
-  const hasPulseUnlock = !!(active["pulse_tier_unlocked"] || active["ad_free_access"] || active["Extreamix Pro"]);
-  const hasStudio = !!(active["studio_access"] || active["Extreamix Pro"]);
-  const hasBroadcast = !!(active["broadcast_access"] || active["Extreamix Pro"]);
-  const isPro = hasPulseUnlock || hasStudio || hasBroadcast;
-
-  if (isPro) {
-    console.log("Access Granted: Premium features unlocked.", { hasPulseUnlock, hasStudio, hasBroadcast });
+export function checkExtreamixProStatus(customerInfo: any) {
+  if (customerInfo && customerInfo.entitlements && customerInfo.entitlements.active["Extreamix Pro"]) {
+    console.log("Access Granted: Extreamix Pro features unlocked.");
+    return true;
   } else {
     console.log("User is on the free Pulse tier.");
+    return false;
   }
-  
-  return { hasPulseUnlock, hasStudio, hasBroadcast, isPro };
 }
 
-export async function handlePurchase(): Promise<EntitlementStatus> {
+export async function handlePurchase() {
   try {
     const { customerInfo } = await purchases.presentPaywall({
       htmlTarget: undefined // full screen overlay
@@ -78,15 +64,18 @@ export async function handlePurchase(): Promise<EntitlementStatus> {
   }
 }
 
-export async function refreshCustomerStatus(): Promise<EntitlementStatus> {
+export async function refreshCustomerStatus(): Promise<{ isPro: boolean; activeEntitlements: string[] }> {
   try {
     const customerInfo = await purchases.getCustomerInfo();
-    return checkExtreamixProStatus(customerInfo);
+    const isPro = checkExtreamixProStatus(customerInfo);
+    const activeEntitlements = Object.keys(customerInfo?.entitlements?.active || {});
+    return { isPro, activeEntitlements };
   } catch (error) {
     console.error("Failed to retrieve customer info:", error);
-    return { hasPulseUnlock: false, hasStudio: false, hasBroadcast: false, isPro: false };
+    return { isPro: false, activeEntitlements: [] };
   }
 }
+
 
 export async function getManagementURL() {
   try {

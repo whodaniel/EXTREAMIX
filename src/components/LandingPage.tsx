@@ -2,18 +2,16 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Zap, Shield, Clock, Crosshair, Check, ChevronRight, Activity } from 'lucide-react';
 
-import { EntitlementStatus } from '../services/revenueCat';
-
 export const LandingPage = ({ 
   onInitiate, 
   packages = [], 
-  entitlements = { hasPulseUnlock: false, hasStudio: false, hasBroadcast: false, isPro: false }, 
+  isPro = false, 
   onPurchase,
   isPurchasing = false 
 }: { 
   onInitiate: () => void;
   packages?: any[];
-  entitlements?: EntitlementStatus;
+  isPro?: boolean;
   onPurchase?: () => void;
   isPurchasing?: boolean;
 }) => {
@@ -167,10 +165,10 @@ export const LandingPage = ({
                     onInitiate();
                   }
                 }}
-                disabled={isPurchasing || entitlements.hasPulseUnlock || entitlements.hasStudio || entitlements.hasBroadcast}
+                disabled={isPurchasing}
                 className="w-full py-4 bg-primary/20 hover:bg-primary/40 text-primary border border-primary/50 font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
               >
-                {(entitlements.hasPulseUnlock || entitlements.hasStudio || entitlements.hasBroadcast) ? 'AD-FREE ACTIVE' : isPurchasing ? 'PROCESSING...' : 'REMOVE ADS ($2.99)'}
+                {isPurchasing ? 'PROCESSING...' : 'REMOVE ADS ($2.99)'}
               </button>
             </div>
 
@@ -200,7 +198,7 @@ export const LandingPage = ({
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Dynamic MIDI Mapping</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Unlimited Registry Patches</li>
               </ul>
-              {(entitlements.hasStudio || entitlements.hasBroadcast) ? (
+              {isPro ? (
                  <button onClick={onInitiate} className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black">
                     ACCESS GRANTED // ENGAGE
                  </button>
@@ -244,7 +242,7 @@ export const LandingPage = ({
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> Multi-Stream RTMP Output</li>
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> URL Media Injection</li>
               </ul>
-              {entitlements.hasBroadcast ? (
+              {isPro ? (
                  <button onClick={onInitiate} className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black">
                     ACCESS GRANTED
                  </button>

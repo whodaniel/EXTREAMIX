@@ -1,8 +1,14 @@
-export type View = 'mixer' | 'filters' | 'routing' | 'library' | 'vision' | 'admin';
+export type View = 'mixer' | 'filters' | 'routing' | 'library' | 'vision' | 'admin' | 'addons' | 'filter-designer';
 
 export interface Point {
   x: number;
   y: number;
+}
+
+export interface CustomVideoFilter {
+  id: string;
+  name: string;
+  shaderCode: string;
 }
 
 export interface VideoSource {
@@ -19,6 +25,7 @@ export interface VideoSource {
   audioChannelId?: string;
   pulseRouting: string[]; // List of Pulse Track IDs this asset is latched to. Empty means unlatched.
   pulseOpacity: number; // Animated value modulated by the engine.
+  customFilterId?: string;
 }
 
 export interface EQState {

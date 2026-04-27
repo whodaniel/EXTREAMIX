@@ -1,10 +1,128 @@
-import { VideoSource } from '../types';
+import { VideoSource, CustomVideoFilter } from '../types';
+
+class VideoFilterEngine {
+  private canvas: HTMLCanvasElement;
+  private gl: WebGLRenderingContext | null = null;
+  private quadBuffer: WebGLBuffer | null = null;
+  private programMap: Map<string, WebGLProgram> = new Map();
+  private texture: WebGLTexture | null = null;
+  private lastStream: MediaStream | null = null;
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    this.gl = this.canvas.getContext('webgl', { premultipliedAlpha: false });
+    this.initGeometry();
+  }
+
+  private initGeometry() {
+    if (!this.gl) return;
+    const gl = this.gl;
+    this.quadBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1.0, -1.0, 0.0, 1.0,
+       1.0, -1.0, 1.0, 1.0,
+      -1.0,  1.0, 0.0, 0.0,
+       1.0,  1.0, 1.0, 0.0
+    ]), gl.STATIC_DRAW);
+
+    this.texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+
+  private compileShader(fsSource: string): WebGLProgram | null {
+    if (!this.gl) return null;
+    const gl = this.gl;
+
+    const vsSource = `
+      attribute vec2 a_position;
+      attribute vec2 a_texCoord;
+      varying vec2 v_texCoord;
+      void main() {
+        gl_Position = vec4(a_position, 0, 1);
+        v_texCoord = a_texCoord;
+      }
+    `;
+
+    const vs = gl.createShader(gl.VERTEX_SHADER)!;
+    gl.shaderSource(vs, vsSource);
+    gl.compileShader(vs);
+
+    const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
+    gl.shaderSource(fs, fsSource);
+    gl.compileShader(fs);
+    
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(fs));
+      return null;
+    }
+
+    const program = gl.createProgram()!;
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    return program;
+  }
+
+  public processFrame(videoEl: HTMLVideoElement, shaderCode: string, timeSeconds: number): HTMLCanvasElement {
+    if (!this.gl || videoEl.readyState < 2) return this.canvas;
+    const gl = this.gl;
+
+    if (this.canvas.width !== videoEl.videoWidth || this.canvas.height !== videoEl.videoHeight) {
+      this.canvas.width = videoEl.videoWidth;
+      this.canvas.height = videoEl.videoHeight;
+      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    // Hash or use raw code as key
+    let program = this.programMap.get(shaderCode);
+    if (!program) {
+      program = this.compileShader(shaderCode);
+      if (program) this.programMap.set(shaderCode, program);
+    }
+    if (!program) return this.canvas;
+
+    gl.useProgram(program);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+    const posLoc = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 16, 0);
+
+    const texLoc = gl.getAttribLocation(program, "a_texCoord");
+    gl.enableVertexAttribArray(texLoc);
+    gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, 16, 8);
+
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+
+    const timeLoc = gl.getUniformLocation(program, "u_time");
+    if (timeLoc) gl.uniform1f(timeLoc, timeSeconds);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    return this.canvas;
+  }
+}
 
 class VideoEngine {
   private sources: Map<string, VideoSource> = new Map();
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private animationId: number | null = null;
+  
+  private filterEngine = new VideoFilterEngine();
+  private customFiltersMap: Map<string, CustomVideoFilter> = new Map();
+  private engineStartTime = Date.now();
+  
+  public setCustomFilters(filters: CustomVideoFilter[]) {
+    this.customFiltersMap.clear();
+    filters.forEach(f => this.customFiltersMap.set(f.id, f));
+  }
+
   
   private isDragging = false;
   private isResizing = false;
@@ -285,14 +403,26 @@ class VideoEngine {
             const dx = (this.canvas!.width - dw) / 2 + (source.position.x * this.canvas!.width / 2);
             const dy = (this.canvas!.height - dh) / 2 + (source.position.y * this.canvas!.height / 2);
             
-            this.ctx.drawImage(source.videoElement, dx, dy, dw, dh);
+            let sourceImage: HTMLCanvasElement | HTMLVideoElement = source.videoElement;
+            if (source.customFilterId) {
+                const filter = this.customFiltersMap.get(source.customFilterId);
+                if (filter) {
+                    sourceImage = this.filterEngine.processFrame(
+                        source.videoElement, 
+                        filter.shaderCode, 
+                        (Date.now() - this.engineStartTime) / 1000.0
+                    );
+                }
+            }
+
+            this.ctx.drawImage(sourceImage, dx, dy, dw, dh);
 
             // Visual FX Sweeps / Echos
             if (source.pulseOpacity > 0.5) {
                this.ctx.save();
                this.ctx.globalAlpha = (source.pulseOpacity - 0.5) * 2 * 0.3;
                this.ctx.filter = 'blur(10px) brightness(2)';
-               this.ctx.drawImage(source.videoElement, dx - 10, dy - 10, dw + 20, dh + 20);
+               this.ctx.drawImage(sourceImage, dx - 10, dy - 10, dw + 20, dh + 20);
                this.ctx.restore();
             }
 

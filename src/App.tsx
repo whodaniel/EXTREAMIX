@@ -36,15 +36,19 @@ import {
   Clock,
   Waves,
   Disc,
-  Wind
+  Wind,
+  PackagePlus,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
-import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL, EntitlementStatus } from './services/revenueCat';
+import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { AddonsView } from './components/AddonsView';
+import { FilterDesignerView, WebGLPreview } from './components/FilterDesignerView';
 import { BroadcastView } from './components/BroadcastView';
 import { AdBanner } from './components/AdBanner';
 
@@ -117,7 +121,8 @@ const ImagingView = ({
   activeSourceId,
   sequencer,
   cameraFacingMode,
-  setCameraFacingMode
+  setCameraFacingMode,
+  customFilters
 }: { 
   sources: VideoSource[], 
   onUpdate: (id: string, update: Partial<VideoSource>) => void, 
@@ -128,7 +133,8 @@ const ImagingView = ({
   activeSourceId: string | null,
   sequencer: SequencerState,
   cameraFacingMode: 'user' | 'environment',
-  setCameraFacingMode: (mode: 'user' | 'environment') => void
+  setCameraFacingMode: (mode: 'user' | 'environment') => void,
+  customFilters: import('./types').CustomVideoFilter[]
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -216,11 +222,11 @@ const ImagingView = ({
       {/* Main Canvas Monitor */}
       <div 
         ref={containerRef}
-        className="w-full xl:flex-[3] aspect-video xl:aspect-auto min-h-[250px] md:min-h-[400px] xl:min-h-0 bg-black rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl"
+        className="w-full xl:flex-[3] aspect-video xl:aspect-auto min-h-[250px] md:min-h-[400px] xl:min-h-0 bg-[#0a0a0a] rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl flex items-center justify-center p-2 md:p-4"
       >
         <canvas 
           ref={canvasRef} 
-          className="w-full h-full object-contain" 
+          className="max-w-full max-h-full aspect-video rounded-xl shadow-2xl border border-white/10 bg-black" 
           width={1920} height={1080} 
           role="img" 
           aria-label="Imaging Module WebGL Canvas"
@@ -467,6 +473,31 @@ const ImagingView = ({
                       </optgroup>
                     </select>
                   </div>
+                  <div className="space-y-1">
+                    <div className="font-headline text-[8px] text-outline uppercase tracking-wider">AI Filter Preset</div>
+                    <select 
+                      value={source.customFilterId || ''}
+                      onChange={e => onUpdate(source.id, { customFilterId: e.target.value })}
+                      className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1 text-[9px] text-primary outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
+                    >
+                      <option value="">None</option>
+                      {customFilters.map(f => (
+                         <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                    {source.customFilterId && customFilters.find(f => f.id === source.customFilterId) && source.stream && (
+                       <div className="mt-2 w-full aspect-video rounded-lg overflow-hidden border border-primary/30 bg-black relative shadow-[0_0_15px_rgba(56,189,248,0.1)] pointer-events-none">
+                         <WebGLPreview 
+                           stream={source.stream}
+                           fragmentShader={customFilters.find(f => f.id === source.customFilterId)!.shaderCode}
+                         />
+                         <div className="absolute bottom-1 right-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[7px] text-primary font-mono uppercase">Filter Preview</div>
+                       </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3" onPointerDown={e => e.stopPropagation()}>
                   <div className="space-y-1">
                     <div className="font-headline text-[8px] text-outline uppercase tracking-wider flex justify-between">
                       <span>Pulse Gate</span>
@@ -1442,7 +1473,7 @@ const MatrixView = ({
 
         {/* Global Action */}
         <div className="mt-8 flex justify-center">
-           <button className="bg-transparent border-2 border-white/10 hover:border-white/40 text-outline hover:text-white px-8 py-4 rounded-2xl font-headline text-[10px] uppercase tracking-[0.3em] font-black transition-all active:scale-95">
+           <button onClick={() => alert("Hardware scan initiated. No new connected MIDI interfaces detected.")} className="bg-transparent border-2 border-white/10 hover:border-white/40 text-outline hover:text-white px-8 py-4 rounded-2xl font-headline text-[10px] uppercase tracking-[0.3em] font-black transition-all active:scale-95">
              RESCAN_MIDI_INTERFACES
            </button>
         </div>
@@ -1591,8 +1622,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('mixer');
   
   // RevenueCat State
-  const [entitlements, setEntitlements] = useState<EntitlementStatus>({ hasPulseUnlock: false, hasStudio: false, hasBroadcast: false, isPro: false });
-  const isPro = entitlements.isPro;
+  const [isPro, setIsPro] = useState(false);
+  const [activeEntitlements, setActiveEntitlements] = useState<string[]>(['ai_filter_forge', 'Extreamix Pro']);
   const [packages, setPackages] = useState<any[]>([]);
   const [isPurchasing, setIsPurchasing] = useState(false);
   
@@ -1632,8 +1663,9 @@ export default function App() {
       try {
         const userId = getOrCreateUserId();
         await authenticateUser(userId);
-        const status = await refreshCustomerStatus();
-        setEntitlements(status);
+        const { isPro: isProStatus, activeEntitlements: entitlements } = await refreshCustomerStatus();
+        setIsPro(isProStatus);
+        setActiveEntitlements(entitlements);
         const pkgs = await loadPaywallData();
         setPackages(pkgs);
       } catch (err) {
@@ -1769,6 +1801,21 @@ export default function App() {
   // High-resolution clock tick to drive UI playheads
   const [pulseActiveSteps, setPulseActiveSteps] = useState<{[key: string]: number}>({});
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
+  const [customFilters, setCustomFilters] = useState<import('./types').CustomVideoFilter[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_customFilters');
+      if (saved) return JSON.parse(saved);
+    }
+    return [];
+  });
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('extreamix_customFilters', JSON.stringify(customFilters));
+    }
+    videoEngine.setCustomFilters(customFilters);
+  }, [customFilters]);
+
   const [routingSources, setRoutingSources] = useState<RoutingSource[]>([
     { id: 'src-1', name: 'TAB_AUDIO_LOFI', active: true, type: 'tab' },
     { id: 'src-2', name: 'MIC_INPUT_PRIMARY', active: true, type: 'mic' },
@@ -1890,6 +1937,33 @@ export default function App() {
     // Simulate loading a preset by briefly triggering the limiter LED and logging
     setMasterLimiterActive(true);
     setTimeout(() => setMasterLimiterActive(false), 300);
+  };
+
+  const handleAddChannel = () => {
+    const defaultFX: FXState = {
+      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
+      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
+      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
+      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
+    };
+    const newChannelId = `ch-${Date.now()}`;
+    const newChannel: ChannelState = {
+      id: newChannelId,
+      name: `TRACK ${channels.length + 1}`,
+      volume: 0.8,
+      pan: 0,
+      depth: 0,
+      mute: false,
+      solo: false,
+      eq: { low: 0, mid: 0, high: 0 },
+      fx: defaultFX,
+      pitchCorrection: 0,
+      beatCorrection: 0,
+      pulseRouting: []
+    };
+    setChannels(prev => [...prev, newChannel]);
+    audioEngine.createChannel(newChannelId, newChannel);
+    setCurrentView('mixer');
   };
 
   const handleRouteExternalTab = async () => {
@@ -2222,14 +2296,14 @@ export default function App() {
         channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
       }} 
       packages={packages}
-      entitlements={entitlements}
+      isPro={isPro}
       isPurchasing={isPurchasing}
       onPurchase={async () => {
         try {
           setIsPurchasing(true);
           const success = await handlePurchase();
-          setEntitlements(success);
-          if (success.isPro) {
+          setIsPro(success);
+          if (success) {
             audioEngine.init();
             setIsLaunched(true);
             channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
@@ -2257,7 +2331,14 @@ export default function App() {
           </div>
           <nav className="hidden xl:flex items-center gap-8">
             {['PROJ_INF', 'EXP_LOG', 'SYS_CFG'].map((item, i) => (
-              <button key={item} className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}>
+              <button 
+                key={item} 
+                onClick={() => {
+                   if (item === 'SYS_CFG') setIsSettingsOpen(true);
+                   else alert(item + " module requires EXTREAMIX PRO license to unlock.");
+                }}
+                className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
+              >
                 {item}
               </button>
             ))}
@@ -2314,20 +2395,22 @@ export default function App() {
       <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
         {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}
         <nav className="relative w-full h-16 flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-8 lg:p-0">
-           <div className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4">
-            <Music className="w-5 h-5 md:w-6 md:h-6 text-primary" />
-          </div>
-          <div className="flex md:flex-col w-full md:space-y-2 md:flex-1">
+           <button onClick={() => setCurrentView('mixer')} className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4 hover:bg-surface-container-highest transition-colors group" title="Return to Extreamix Console">
+            <Music className="w-5 h-5 md:w-6 md:h-6 text-primary group-hover:scale-110 transition-transform" />
+          </button>
+          <div className="flex md:flex-col w-full md:space-y-1 md:flex-1">
             <NavItem icon={SlidersHorizontal} label="Console" active={currentView === 'mixer'} onClick={() => setCurrentView('mixer')} />
             <NavItem icon={Video} label="Imaging" active={currentView === 'vision'} onClick={() => setCurrentView('vision')} />
             <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
             <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'routing'} onClick={() => setCurrentView('routing')} />
             <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
+            <NavItem icon={Wand2} label="AI Filter" active={currentView === 'filter-designer'} onClick={() => setCurrentView('filter-designer')} />
+            <NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
             <NavItem icon={Settings} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
           </div>
 
           <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full">
-            <button className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all">ADD_TRK</button>
+            <button onClick={handleAddChannel} className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all">ADD_TRK</button>
             <NavItem icon={Settings} label="Config" active={isSettingsOpen} onClick={() => setIsSettingsOpen(true)} />
           </div>
         </nav>
@@ -2433,6 +2516,7 @@ export default function App() {
                   sequencer={sequencer}
                   cameraFacingMode={cameraFacingMode}
                   setCameraFacingMode={setCameraFacingMode}
+                  customFilters={customFilters}
                 />
               )}
               {currentView === 'mixer' && (
@@ -2474,6 +2558,24 @@ export default function App() {
                 <RegistryView 
                   presets={registryPresets}
                   onLoadPreset={loadPreset}
+                />
+              )}
+              {currentView === 'addons' && (
+                <AddonsView 
+                  activeEntitlements={activeEntitlements} 
+                  onPurchase={async () => {
+                    const { isPro: isProStatus, activeEntitlements: entitlements } = await refreshCustomerStatus();
+                    setIsPro(isProStatus);
+                    setActiveEntitlements(entitlements);
+                  }} 
+                />
+              )}
+              {currentView === 'filter-designer' && (
+                <FilterDesignerView 
+                  activeEntitlements={activeEntitlements}
+                  videoSources={videoSources}
+                  customFilters={customFilters}
+                  setCustomFilters={setCustomFilters}
                 />
               )}
               {currentView === 'admin' && (
