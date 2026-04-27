@@ -38,7 +38,7 @@ import {
   Disc,
   Wind
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
 import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
@@ -344,50 +344,63 @@ const ImagingView = ({
               </div>
            </div>
 
-            {sources.map(source => {
+            <Reorder.Group 
+              axis="y" 
+              values={[...sources].sort((a, b) => b.zIndex - a.zIndex)} 
+              onReorder={(newOrder) => {
+                 newOrder.forEach((src, idx) => {
+                   onUpdate(src.id, { zIndex: newOrder.length - idx });
+                 });
+              }}
+              className="space-y-4 pt-2 pb-10"
+            >
+            {[...sources].sort((a, b) => b.zIndex - a.zIndex).map(source => {
               const isSelected = activeSourceId === source.id;
               return (
-              <motion.div 
+              <Reorder.Item 
                  key={source.id} 
+                 value={source}
                  id={`vis-config-${source.id}`}
                  initial={false}
                  animate={isSelected ? { scale: [1, 1.02, 1], borderColor: 'rgba(56,189,248,0.5)' } : { scale: 1, borderColor: 'rgba(255,255,255,0.05)' }}
                  transition={{ duration: 0.5 }}
-                 className={`rounded-2xl p-5 border space-y-6 transition-colors group ${
+                 className={`rounded-2xl p-4 border space-y-4 transition-colors group cursor-grab active:cursor-grabbing ${
                    isSelected ? 'bg-primary/10 shadow-[0_0_30px_rgba(56,189,248,0.15)] outline outline-2 outline-primary/20' : 'bg-surface-container-low/50 hover:bg-surface-container-low'
                  }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <Monitor className="w-5 h-5 text-primary" />
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 pointer-events-none">
+                      <Monitor className="w-4 h-4 text-primary" />
                     </div>
-                    <div>
-                      <span className="font-headline text-xs font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
-                      <span className="text-[8px] text-outline font-mono uppercase tracking-tighter">{source.id}</span>
+                    <div className="pointer-events-none">
+                      <span className="font-headline text-[10px] font-bold block truncate max-w-[120px] uppercase text-white">{source.name}</span>
+                      <span className="text-[7px] text-outline font-mono uppercase tracking-tighter">Z-Index: {source.zIndex}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
                      onClick={() => onUpdate(source.id, { active: !source.active })}
-                     className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
+                     className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${source.active ? 'bg-primary text-on-primary-container shadow-[0_0_20px_rgba(142,213,255,0.4)]' : 'bg-surface-container-highest text-outline border border-white/10'}`}
                      title={source.active ? "Deactivate Feed" : "Activate Feed"}
+                     onPointerDown={e => e.stopPropagation()}
                     >
-                      <Layers className="w-4 h-4" />
+                      <Layers className="w-3 h-3" />
                     </button>
                     <button 
                      onClick={() => onRemove(source.id)}
-                     className="w-8 h-8 rounded-xl flex items-center justify-center bg-error/10 text-error hover:bg-error hover:text-on-error border border-error/20 transition-all"
+                     className="w-7 h-7 rounded-xl flex items-center justify-center bg-error/10 text-error hover:bg-error hover:text-on-error border border-error/20 transition-all"
                      title="Remove Feed Permanent"
+                     onPointerDown={e => e.stopPropagation()}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
+                <div className="grid grid-cols-2 gap-3" onPointerDown={e => e.stopPropagation()}>
+                  <div className="space-y-1">
+                    <div className="flex justify-between font-headline text-[8px] text-outline uppercase tracking-wider">
                       <span>Opacity</span>
                       <span className="text-primary">{Math.round(source.opacity * 100)}%</span>
                     </div>
@@ -397,8 +410,8 @@ const ImagingView = ({
                       className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary touch-none"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between font-headline text-[9px] text-outline uppercase tracking-wider">
+                  <div className="space-y-1">
+                    <div className="flex justify-between font-headline text-[8px] text-outline uppercase tracking-wider">
                       <span>Scale</span>
                       <span className="text-primary">{Math.round(source.scale * 100)}%</span>
                     </div>
@@ -410,17 +423,17 @@ const ImagingView = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                     <div className="font-headline text-[9px] text-outline uppercase tracking-wider">X Position</div>
+                <div className="grid grid-cols-2 gap-3" onPointerDown={e => e.stopPropagation()}>
+                   <div className="space-y-1">
+                     <div className="font-headline text-[8px] text-outline uppercase tracking-wider">X Position</div>
                      <input 
                        type="range" min="-1" max="1" step="0.01" value={source.position.x}
                        onChange={e => onUpdate(source.id, { position: { ...source.position, x: parseFloat(e.target.value) } })}
                        className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-tertiary touch-none"
                      />
                    </div>
-                   <div className="space-y-2">
-                     <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Y Position</div>
+                   <div className="space-y-1">
+                     <div className="font-headline text-[8px] text-outline uppercase tracking-wider">Y Position</div>
                      <input 
                        type="range" min="-1" max="1" step="0.01" value={source.position.y}
                        onChange={e => onUpdate(source.id, { position: { ...source.position, y: parseFloat(e.target.value) } })}
@@ -429,61 +442,61 @@ const ImagingView = ({
                    </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="font-headline text-[9px] text-outline uppercase tracking-wider">Spectral Blend Mode</div>
-                  <select 
-                    value={source.blendMode}
-                    onChange={e => onUpdate(source.id, { blendMode: e.target.value })}
-                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
-                  >
-                    <optgroup label="Standard" className="bg-surface-container">
-                     <option value="source-over">Normal</option>
-                     <option value="screen">Screen</option>
-                     <option value="multiply">Multiply</option>
-                     <option value="overlay">Overlay</option>
-                    </optgroup>
-                    <optgroup label="Spectral / Color" className="bg-surface-container">
-                     <option value="additive">Additive (Glow)</option>
-                     <option value="subtractive">Subtractive (Difference)</option>
-                     <option value="exclusion">Exclusion</option>
-                     <option value="hue">Hue Spectral</option>
-                     <option value="color">Full Color</option>
-                     <option value="luminosity">Luminance Isolation</option>
-                     <option value="color-dodge">Color Dodge</option>
-                    </optgroup>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="font-headline text-[9px] text-outline uppercase tracking-wider flex justify-between">
-                    <span>Pulse Routing Latch</span>
-                    {source.pulseRouting && source.pulseRouting.length > 0 && <span className="text-primary animate-pulse font-black text-[7px]">FILTERED_SIGNAL</span>}
+                <div className="grid grid-cols-2 gap-3" onPointerDown={e => e.stopPropagation()}>
+                  <div className="space-y-1">
+                    <div className="font-headline text-[8px] text-outline uppercase tracking-wider">Blend Mode</div>
+                    <select 
+                      value={source.blendMode}
+                      onChange={e => onUpdate(source.id, { blendMode: e.target.value })}
+                      className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1 text-[9px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
+                    >
+                      <optgroup label="Standard" className="bg-surface-container">
+                       <option value="source-over">Normal</option>
+                       <option value="screen">Screen</option>
+                       <option value="multiply">Multiply</option>
+                       <option value="overlay">Overlay</option>
+                      </optgroup>
+                      <optgroup label="Spectral / Color" className="bg-surface-container">
+                       <option value="additive">Additive</option>
+                       <option value="subtractive">Subtract</option>
+                       <option value="exclusion">Exclusion</option>
+                       <option value="hue">Hue</option>
+                       <option value="color">Color</option>
+                       <option value="luminosity">Luma</option>
+                       <option value="color-dodge">Dodge</option>
+                      </optgroup>
+                    </select>
                   </div>
-                  <select 
-                    multiple
-                    value={source.pulseRouting || []}
-                    onChange={e => {
-                      const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
-                      onUpdate(source.id, { pulseRouting: vals });
-                    }}
-                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-2 text-[10px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider min-h-[80px] custom-scrollbar focus:ring-1 focus:ring-primary/40"
-                  >
-                    {sequencer.tracks.map(t => (
-                      <option key={t.id} value={t.id} className="p-1">{t.name} [{t.id.toUpperCase()}]</option>
-                    ))}
-                  </select>
-                  <div className="text-[8px] text-outline mt-1 font-mono uppercase leading-tight">Cmd/Ctrl-Click to multi-select. Select none to UNLATCH.</div>
+                  <div className="space-y-1">
+                    <div className="font-headline text-[8px] text-outline uppercase tracking-wider flex justify-between">
+                      <span>Pulse Gate</span>
+                      {source.pulseRouting && source.pulseRouting.length > 0 && <span className="text-primary animate-pulse font-black text-[7px]">ON</span>}
+                    </div>
+                    <select 
+                      multiple
+                      value={source.pulseRouting || []}
+                      onChange={e => {
+                        const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
+                        onUpdate(source.id, { pulseRouting: vals });
+                      }}
+                      className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1 text-[9px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider h-[24px] custom-scrollbar focus:ring-1 focus:ring-primary/40 leading-tight block truncate"
+                    >
+                      {sequencer.tracks.map(t => (
+                        <option key={t.id} value={t.id} className="p-0.5">{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 font-headline text-[9px] text-outline uppercase tracking-wider">
-                    <Volume2 className="w-3 h-3 text-primary" />
+                <div className="space-y-1" onPointerDown={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 font-headline text-[8px] text-outline uppercase tracking-wider">
+                    <Volume2 className="w-2 h-2 text-primary" />
                     <span>Audio Routing Bus</span>
                   </div>
                   <select 
                     value={source.audioChannelId || ''}
                     onChange={e => onUpdate(source.id, { audioChannelId: e.target.value })}
-                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-4 py-3 text-xs text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
+                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1.5 text-[9px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
                   >
                     <option value="">NO_ROUTING</option>
                     {channels.map(ch => (
@@ -491,9 +504,10 @@ const ImagingView = ({
                     ))}
                   </select>
                 </div>
-              </motion.div>
+              </Reorder.Item>
             );
             })}
+            </Reorder.Group>
 
            {sources.length === 0 && (
              <div className="py-20 text-center text-outline">
@@ -1982,8 +1996,8 @@ export default function App() {
       let changed = false;
       videoEngine.getSources().forEach(source => {
         if (source.pulseOpacity > 0) {
-          // Sharp decay to produce "filtered" strobe effect
-          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.2); 
+          // Soft decay to produce a gated rolloff effect
+          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.03); 
           changed = true;
         }
       });
