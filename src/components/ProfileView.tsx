@@ -1,12 +1,32 @@
 import { useState, useEffect } from 'react';
-import { LogOut, User, Key, Bell, Shield, Wallet, Palette, Sparkles, Wand2, PaintBucket } from 'lucide-react';
+import { LogOut, User, Key, Bell, Shield, Wallet, Palette, Sparkles, Wand2, PaintBucket, Crown, ExternalLink } from 'lucide-react';
+import { getSubscriptionDetails, ENTITLEMENTS } from '../services/revenueCat';
+import type { SubscriptionState } from '../hooks/useSubscription';
 
-export const ProfileView = () => {
+interface ProfileViewProps {
+  subscription: SubscriptionState;
+  onOpenManagement: () => void;
+}
+
+const TIER_BADGE_COLORS: Record<string, string> = {
+  'Pulse (Free)': 'bg-white/10 text-outline',
+  'Studio': 'bg-primary/20 text-primary border-primary/30',
+  'Broadcast': 'bg-tertiary/20 text-tertiary border-tertiary/30',
+};
+
+export const ProfileView = ({ subscription, onOpenManagement }: ProfileViewProps) => {
   const [customBg, setCustomBg] = useState('#0c1324');
   const [customPrimary, setCustomPrimary] = useState('#8ed5ff');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  
+
+  const { isPro, planName, expirationDate, willRenew, activeEntitlements } = subscription;
+  const badgeClass = TIER_BADGE_COLORS[planName] || TIER_BADGE_COLORS['Pulse (Free)'];
+  const userId = localStorage.getItem('extreamix_rc_user_id') || 'Unknown';
+
+  // Map entitlements to addon names for display
+  const activeAddons = activeEntitlements.filter(e => e !== ENTITLEMENTS.PRO);
+
   const applyCustomTheme = (bg: string, primary: string) => {
     document.documentElement.setAttribute('data-theme', 'custom');
     document.documentElement.style.setProperty('--custom-bg', bg);
@@ -16,23 +36,25 @@ export const ProfileView = () => {
   const handleAIGenerate = () => {
     if (!aiPrompt) return;
     setIsGenerating(true);
-    
-    // Simulate AI thinking and generating a theme
     setTimeout(() => {
-      // Pick random-ish but aesthetic colors
-      // Let's do a quick random hue generation
       const h = Math.floor(Math.random() * 360);
       const bg = `hsl(${h}, 30%, 10%)`; 
       const pri = `hsl(${(h + 180) % 360}, 80%, 60%)`;
-      // We will just generate valid hexs by creating a quick helper, or 
-      // just set HSL strings (CSS supports them)
-      
       applyCustomTheme(bg, pri);
-      setCustomBg(bg); // Just storing string
+      setCustomBg(bg);
       setCustomPrimary(pri);
       setIsGenerating(false);
       setAiPrompt('');
     }, 2000);
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
   };
 
   return (
@@ -54,23 +76,52 @@ export const ProfileView = () => {
                 <span className="text-[10px] uppercase font-bold tracking-widest">Change</span>
               </div>
             </div>
-            <h3 className="font-headline font-black text-lg tracking-widest uppercase">Admin User</h3>
-            <p className="text-outline text-xs font-mono mb-6">admin@extreamix.local</p>
+            <h3 className="font-headline font-black text-lg tracking-widest uppercase">Extreamix User</h3>
+            <p className="text-outline text-xs font-mono mb-6 truncate max-w-full">{userId}</p>
             
             <div className="w-full space-y-2">
               <div className="flex justify-between items-center bg-black/40 px-3 py-2 rounded-lg border border-white/5">
                 <span className="text-[10px] text-outline uppercase tracking-wider font-mono">Status</span>
-                <span className="text-[10px] text-success uppercase tracking-wider font-bold">Active</span>
+                <span className={`text-[10px] uppercase tracking-wider font-bold ${isPro ? 'text-success' : 'text-outline'}`}>
+                  {isPro ? 'Pro Active' : 'Free Tier'}
+                </span>
               </div>
               <div className="flex justify-between items-center bg-black/40 px-3 py-2 rounded-lg border border-white/5">
                 <span className="text-[10px] text-outline uppercase tracking-wider font-mono">Plan</span>
-                <span className="text-[10px] text-primary uppercase tracking-wider font-bold">Pro License</span>
+                <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${badgeClass}`}>
+                  {isPro && <Crown className="w-3 h-3 inline mr-1" />}
+                  {planName}
+                </span>
               </div>
-              <div className="flex justify-between items-center bg-black/40 px-3 py-2 rounded-lg border border-white/5">
-                <span className="text-[10px] text-outline uppercase tracking-wider font-mono">Since</span>
-                <span className="text-[10px] text-white uppercase tracking-wider font-bold">2026</span>
-              </div>
+              {expirationDate && (
+                <div className="flex justify-between items-center bg-black/40 px-3 py-2 rounded-lg border border-white/5">
+                  <span className="text-[10px] text-outline uppercase tracking-wider font-mono">Renews</span>
+                  <span className="text-[10px] text-white uppercase tracking-wider font-bold">
+                    {formatDate(expirationDate)}
+                  </span>
+                </div>
+              )}
+              {activeAddons.length > 0 && (
+                <div className="flex justify-between items-center bg-black/40 px-3 py-2 rounded-lg border border-white/5">
+                  <span className="text-[10px] text-outline uppercase tracking-wider font-mono">Add-ons</span>
+                  <span className="text-[10px] text-primary uppercase tracking-wider font-bold">
+                    {activeAddons.length} active
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* Manage Subscription Button */}
+            {(isPro || activeAddons.length > 0) && (
+              <button 
+                onClick={onOpenManagement}
+                className="mt-4 w-full py-3 px-4 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all flex items-center justify-center gap-2"
+              >
+                <Wallet className="w-3 h-3" />
+                MANAGE SUBSCRIPTION
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -84,18 +135,12 @@ export const ProfileView = () => {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase tracking-widest text-outline font-mono">Display Name</label>
-                  <input type="text" defaultValue="Admin User" className="w-full bg-surface-container border border-white/10 rounded-xl px-4 py-2 flex items-center text-xs text-white outline-none focus:border-primary/50 transition-all font-mono" />
+                  <input type="text" defaultValue="Extreamix User" className="w-full bg-surface-container border border-white/10 rounded-xl px-4 py-2 flex items-center text-xs text-white outline-none focus:border-primary/50 transition-all font-mono" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest text-outline font-mono">Email Address</label>
-                  <input type="email" defaultValue="admin@extreamix.local" className="w-full bg-surface-container border border-white/10 rounded-xl px-4 py-2 flex items-center text-xs text-outline outline-none transition-all font-mono opacity-50 cursor-not-allowed" readOnly />
+                  <label className="text-[10px] uppercase tracking-widest text-outline font-mono">User ID</label>
+                  <input type="text" value={userId} className="w-full bg-surface-container border border-white/10 rounded-xl px-4 py-2 flex items-center text-xs text-outline outline-none transition-all font-mono opacity-50 cursor-not-allowed" readOnly />
                 </div>
-              </div>
-              
-              <div className="pt-4 mt-6 border-t border-white/5">
-                <button className="px-6 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg text-xs font-headline uppercase tracking-widest font-bold transition-all w-full md:w-auto">
-                  Update Password
-                </button>
               </div>
             </div>
           </div>
@@ -106,7 +151,6 @@ export const ProfileView = () => {
               <h4 className="font-headline font-bold text-xs uppercase tracking-widest">Interface & Theme</h4>
             </div>
             <div className="p-6 space-y-6">
-              
               {/* Presets */}
               <div className="flex flex-col gap-4 p-4 bg-black/40 border border-white/5 rounded-xl">
                 <div className="flex flex-col">
@@ -194,47 +238,52 @@ export const ProfileView = () => {
 
               {/* AI Theme Forge Add-on */}
               <div className="flex flex-col gap-4 p-4 border border-primary/20 rounded-xl relative overflow-hidden group">
-                 <div className="absolute inset-0 bg-primary/5 group-hover:bg-primary/10 transition-colors" />
-                 
-                 <div className="flex items-center gap-2 z-10 relative mb-2">
-                    <div className="bg-primary/20 p-2 rounded-lg">
-                      <Sparkles className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex flex-col flex-1">
-                      <span className="text-sm font-black text-white uppercase tracking-widest" style={{ textShadow: '0 0 10px var(--color-primary)' }}>AI Theme Forge</span>
-                      <span className="text-[10px] text-primary/80 font-mono tracking-widest uppercase flex items-center gap-2">
-                        Add-on unlocked <Wand2 className="w-3 h-3" />
-                      </span>
-                    </div>
-                 </div>
-
-                 <div className="flex gap-2 z-10 relative">
-                    <input 
-                      type="text" 
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="E.g., 'Retro Tokyo Arcade in the rain' or 'Minimalist Scandinavian wood'"
-                      className="flex-1 bg-black/60 border border-primary/30 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-primary transition-all font-mono placeholder:text-outline/50"
-                      onKeyDown={(e) => e.key === 'Enter' && handleAIGenerate()}
-                    />
-                    <button 
-                      onClick={handleAIGenerate}
-                      disabled={!aiPrompt || isGenerating}
-                      className="bg-primary hover:bg-primary-container text-black font-black uppercase tracking-widest text-[10px] px-6 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isGenerating ? (
-                        <>
-                           <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                           Forging
-                        </>
+                <div className="absolute inset-0 bg-primary/5 group-hover:bg-primary/10 transition-colors" />
+                
+                <div className="flex items-center gap-2 z-10 relative mb-2">
+                  <div className="bg-primary/20 p-2 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex flex-col flex-1">
+                    <span className="text-sm font-black text-white uppercase tracking-widest" style={{ textShadow: '0 0 10px var(--color-primary)' }}>AI Theme Forge</span>
+                    <span className="text-[10px] text-primary/80 font-mono tracking-widest uppercase flex items-center gap-2">
+                      {activeEntitlements.includes(ENTITLEMENTS.AI_THEME_FORGE) || isPro ? (
+                        <>Add-on unlocked <Wand2 className="w-3 h-3" /></>
                       ) : (
-                        <>
-                          <Sparkles className="w-3 h-3" />
-                          Generate
-                        </>
+                        <>Requires add-on purchase <Wand2 className="w-3 h-3" /></>
                       )}
-                    </button>
-                 </div>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 z-10 relative">
+                  <input 
+                    type="text" 
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="E.g., 'Retro Tokyo Arcade in the rain' or 'Minimalist Scandinavian wood'"
+                    className="flex-1 bg-black/60 border border-primary/30 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-primary transition-all font-mono placeholder:text-outline/50"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAIGenerate()}
+                    disabled={!isPro && !activeEntitlements.includes(ENTITLEMENTS.AI_THEME_FORGE)}
+                  />
+                  <button 
+                    onClick={handleAIGenerate}
+                    disabled={!aiPrompt || isGenerating || (!isPro && !activeEntitlements.includes(ENTITLEMENTS.AI_THEME_FORGE))}
+                    className="bg-primary hover:bg-primary-container text-black font-black uppercase tracking-widest text-[10px] px-6 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                        Forging
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3" />
+                        Generate
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

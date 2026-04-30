@@ -1,15 +1,15 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Sparkles, ArrowRight, CheckCircle2, Lock, Bot } from 'lucide-react';
-import { handlePurchase } from '../services/revenueCat';
+import { ENTITLEMENTS } from '../services/revenueCat';
 
 const ADDONS = [
   {
     id: 'ai_filter_forge',
     name: 'AI Filter Forge',
     description: 'Use advanced AI to generate and design live video filters and visual effects using natural language. Perfect for generating custom dynamic broadcast overlays.',
-    icon: Sparkles, // reusing sparkels since Bot is used below
-    rcIdentifier: 'ai_filter_forge',
+    icon: Sparkles,
+    entitlementKey: ENTITLEMENTS.AI_FILTER_FORGE,
     price: '$1.99 (50 Credits)',
     features: [
       'Text-to-Shader Live Rendering',
@@ -23,7 +23,7 @@ const ADDONS = [
     name: 'AI Synth Scaffolder',
     description: 'Use advanced AI to generate intelligent synth patches, complex crossover matrices, and generate dynamic background visuals directly from text prompts.',
     icon: Bot,
-    rcIdentifier: 'ai_feature_pack', // Conceptual RevenueCat entitlement/product identifier
+    entitlementKey: ENTITLEMENTS.AI_SYNTH_SCAFFOLDER,
     price: '$4.99/mo',
     features: [
       'Prompt-to-Matrix Routing',
@@ -37,7 +37,7 @@ const ADDONS = [
     name: 'Spatial Audio Engine',
     description: 'Unlock 3D spatial audio tools to pan audio channels across depth and width, perfect for immersive broadcast formats.',
     icon: Sparkles,
-    rcIdentifier: 'spatial_audio_pack',
+    entitlementKey: ENTITLEMENTS.SPATIAL_AUDIO,
     price: '$9.99 (One-Time)',
     features: [
       'Ambisonic Matrix Encoder',
@@ -50,7 +50,7 @@ const ADDONS = [
     name: 'AI Theme Forge',
     description: 'Describe any aesthetic, mood, or setting, and let our generative AI construct a completely custom color palette and apply it instantly to the application interface.',
     icon: Sparkles,
-    rcIdentifier: 'ai_theme_forge',
+    entitlementKey: ENTITLEMENTS.AI_THEME_FORGE,
     price: '$2.99 (Lifetime)',
     features: [
       'Text-to-Theme AI Generation',
@@ -61,22 +61,29 @@ const ADDONS = [
   }
 ];
 
+interface AddonsViewProps {
+  activeEntitlements: string[];
+  isPro: boolean;
+  onPurchaseAddon: (offeringId?: string) => Promise<boolean>;
+}
+
 export const AddonsView = ({ 
   activeEntitlements, 
-  onPurchase 
-}: { 
-  activeEntitlements: string[];
-  onPurchase: () => void;
-}) => {
+  isPro,
+  onPurchaseAddon 
+}: AddonsViewProps) => {
+  const [purchasingId, setPurchasingId] = React.useState<string | null>(null);
 
-  const handleUnlock = async (id: string) => {
-    // Conceptual hookup for purchasing a specific addon.
-    // In reality, we'd open a paywall or pass the id to a custom purchase flow.
-    const success = await handlePurchase(); // using generic payload for now
-    if (success) {
-       onPurchase();
+  const handleUnlock = async (addonId: string) => {
+    setPurchasingId(addonId);
+    try {
+      await onPurchaseAddon(addonId);
+    } catch (e) {
+      console.error('Addon unlock failed:', e);
+    } finally {
+      setPurchasingId(null);
     }
-  }
+  };
 
   return (
     <div className="flex-1 w-full bg-black/40 rounded-3xl border border-white/5 relative overflow-hidden flex flex-col p-8">
@@ -89,13 +96,20 @@ export const AddonsView = ({
           Expand your studio's capabilities with specialized modules. Some foundational features are free, 
           while computational-heavy features (like AI models) are offered as premium add-ons to cover infrastructure costs.
         </p>
+        {isPro && (
+          <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-xl inline-flex">
+            <CheckCircle2 className="w-4 h-4 text-primary" />
+            <span className="text-[10px] font-headline text-primary tracking-widest uppercase font-bold">
+              Extreamix Pro: All add-ons included
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-10">
         {ADDONS.map(addon => {
-          // Since we using a generic RevenueCat mock, let's treat any active entitlement as unlocking everything for demo purposes.
-          // Or we specifically check.
-          const isUnlocked = true; // activeEntitlements.includes(addon.rcIdentifier) || activeEntitlements.includes('Extreamix Pro');
+          const isUnlocked = isPro || activeEntitlements.includes(addon.entitlementKey);
+          const isPurchasing = purchasingId === addon.id;
 
           return (
             <motion.div 
@@ -113,13 +127,13 @@ export const AddonsView = ({
                   <addon.icon className="w-6 h-6" />
                 </div>
                 {isUnlocked ? (
-                   <span className="flex items-center gap-1 text-[9px] font-headline tracking-widest text-primary uppercase bg-primary/10 px-2 py-1 rounded">
-                     <CheckCircle2 className="w-3 h-3" /> ACTIVE
-                   </span>
+                  <span className="flex items-center gap-1 text-[9px] font-headline tracking-widest text-primary uppercase bg-primary/10 px-2 py-1 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> ACTIVE
+                  </span>
                 ) : (
-                   <span className="flex items-center gap-1 text-[9px] font-headline tracking-widest text-outline uppercase bg-white/5 px-2 py-1 rounded">
-                     <Lock className="w-3 h-3" /> LOCKED
-                   </span>
+                  <span className="flex items-center gap-1 text-[9px] font-headline tracking-widest text-outline uppercase bg-white/5 px-2 py-1 rounded">
+                    <Lock className="w-3 h-3" /> LOCKED
+                  </span>
                 )}
               </div>
 
@@ -138,9 +152,10 @@ export const AddonsView = ({
               {!isUnlocked && (
                 <button 
                   onClick={() => handleUnlock(addon.id)}
-                  className="w-full py-3 rounded-xl bg-surface-container-highest hover:bg-white text-white hover:text-black transition-colors font-headline font-bold text-xs uppercase tracking-widest flex items-center justify-between px-4 group"
+                  disabled={isPurchasing}
+                  className="w-full py-3 rounded-xl bg-surface-container-highest hover:bg-white text-white hover:text-black transition-colors font-headline font-bold text-xs uppercase tracking-widest flex items-center justify-between px-4 group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>Unlock Module</span>
+                  <span>{isPurchasing ? 'PROCESSING...' : 'Unlock Module'}</span>
                   <span className="opacity-70 group-hover:opacity-100">{addon.price}</span>
                 </button>
               )}

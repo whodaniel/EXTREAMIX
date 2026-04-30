@@ -43,7 +43,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
-import { authenticateUser, getOrCreateUserId, loadPaywallData, handlePurchase, refreshCustomerStatus, getManagementURL } from './services/revenueCat';
+import { useSubscription } from './hooks/useSubscription';
+import { ENTITLEMENTS } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
@@ -1612,11 +1613,9 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentView, setCurrentView] = useState<View>('mixer');
   
-  // RevenueCat State
-  const [isPro, setIsPro] = useState(false);
-  const [activeEntitlements, setActiveEntitlements] = useState<string[]>(['ai_filter_forge', 'Extreamix Pro']);
-  const [packages, setPackages] = useState<any[]>([]);
-  const [isPurchasing, setIsPurchasing] = useState(false);
+ // RevenueCat State via centralized hook
+ const subscription = useSubscription();
+ const { isPro, activeEntitlements, packages, isPurchasing, purchase, purchaseAddon, openManagement, hasEntitlement } = subscription;
   
   // Subdomain Routing State
   const [subdomain, setSubdomain] = useState<string | null>(null);
@@ -1649,26 +1648,10 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const initRC = async () => {
-      try {
-        const userId = getOrCreateUserId();
-        await authenticateUser(userId);
-        const { isPro: isProStatus, activeEntitlements: entitlements } = await refreshCustomerStatus();
-        setIsPro(isProStatus);
-        setActiveEntitlements(entitlements);
-        const pkgs = await loadPaywallData();
-        setPackages(pkgs);
-      } catch (err) {
-        console.error("RC Init Error", err);
-      }
-    };
-    initRC();
-  }, []);
+ // Subdomain Routing State
 
-  
-  const [channels, setChannels] = useState<ChannelState[]>(() => {
-    const defaultFX: FXState = {
+const [channels, setChannels] = useState<ChannelState[]>(() => {
+ const defaultFX: FXState = {
       delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
       reverb: { active: false, roomSize: 0.5, mix: 0.3 },
       chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
@@ -2284,23 +2267,19 @@ export default function App() {
       }} 
       packages={packages}
       isPro={isPro}
-      isPurchasing={isPurchasing}
-      onPurchase={async () => {
-        try {
-          setIsPurchasing(true);
-          const success = await handlePurchase();
-          setIsPro(success);
-          if (success) {
-            audioEngine.init();
-            setIsLaunched(true);
-            channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
-          }
-        } catch(e) {
-          console.error("Purchase error", e);
-        } finally {
-          setIsPurchasing(false);
-        }
-      }}
+isPurchasing={isPurchasing}
+ onPurchase={async () => {
+ try {
+ const success = await purchase();
+ if (success) {
+ audioEngine.init();
+ setIsLaunched(true);
+ channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
+ }
+ } catch(e) {
+ console.error("Purchase error", e);
+ }
+ }}
     />;
   }
 
@@ -2320,10 +2299,13 @@ export default function App() {
             {['PROJ_INF', 'EXP_LOG', 'SYS_CFG'].map((item, i) => (
               <button 
                 key={item} 
-                onClick={() => {
-                   if (item === 'SYS_CFG') setIsSettingsOpen(true);
-                   else alert(item + " module requires EXTREAMIX PRO license to unlock.");
-                }}
+onClick={() => {
+ if (item === 'SYS_CFG') setIsSettingsOpen(true);
+ else if (!isPro) {
+ purchase();
+ } else {
+ alert(item + " module loading...");
+ }}
                 className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
               >
                 {item}
@@ -2391,7 +2373,13 @@ export default function App() {
             <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
             <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'routing'} onClick={() => setCurrentView('routing')} />
             <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
-            <NavItem icon={Wand2} label="AI Filter" active={currentView === 'filter-designer'} onClick={() => setCurrentView('filter-designer')} />
+            <NavItem icon={Wand2} label="AI Filter" active={currentView === 'filter-designer'} onClick={() => {
+ if (!isPro && !hasEntitlement(ENTITLEMENTS.AI_FILTER_FORGE)) {
+ purchase();
+ } else {
+ setCurrentView('filter-designer');
+ }
+ }} />
             <NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
             <NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
           </div>
@@ -2433,20 +2421,13 @@ export default function App() {
                   <div className="space-y-6">
                     <div>
                       <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Subscription & Access</h3>
-                      <button 
-                        disabled={isPurchasing}
-                        onClick={async () => {
-                          const url = await getManagementURL();
-                          if (url) {
-                            window.open(url, '_blank');
-                          } else {
-                            alert("Management URL not available yet. Please check again later or contact support.");
-                          }
-                        }}
-                        className="w-full py-3 px-4 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all mb-6"
-                      >
-                         MANAGE SUBSCRIPTION
-                      </button>
+<button 
+ disabled={isPurchasing}
+ onClick={openManagement}
+ className="w-full py-3 px-4 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all mb-6"
+ >
+ MANAGE SUBSCRIPTION
+ </button>
                     </div>
 
                     <div>
@@ -2546,16 +2527,13 @@ export default function App() {
                   onLoadPreset={loadPreset}
                 />
               )}
-              {currentView === 'addons' && (
-                <AddonsView 
-                  activeEntitlements={activeEntitlements} 
-                  onPurchase={async () => {
-                    const { isPro: isProStatus, activeEntitlements: entitlements } = await refreshCustomerStatus();
-                    setIsPro(isProStatus);
-                    setActiveEntitlements(entitlements);
-                  }} 
-                />
-              )}
+{currentView === 'addons' && (
+ <AddonsView 
+ activeEntitlements={activeEntitlements}
+ isPro={isPro}
+ onPurchaseAddon={purchaseAddon}
+ />
+ )}
               {currentView === 'filter-designer' && (
                 <FilterDesignerView 
                   activeEntitlements={activeEntitlements}
@@ -2567,9 +2545,9 @@ export default function App() {
               {currentView === 'admin' && (
                 <AdminDashboard />
               )}
-              {currentView === 'profile' && (
-                <ProfileView />
-              )}
+{currentView === 'profile' && (
+ <ProfileView subscription={subscription} onOpenManagement={openManagement} />
+ )}
             </motion.div>
           </AnimatePresence>
           </div>

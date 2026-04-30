@@ -15,6 +15,14 @@ export const LandingPage = ({
   onPurchase?: () => void;
   isPurchasing?: boolean;
 }) => {
+  // Helper to get price from RC packages
+  const getPackagePrice = (identifiers: string[], fallback: string): string => {
+    const pkg = packages.find(p => identifiers.includes(p.identifier));
+    return pkg?.webBillingProduct?.currentPrice?.formattedPrice 
+      || pkg?.webBillingProduct?.defaultPurchaseOption?.basePrice?.formattedPrice 
+      || fallback;
+  };
+
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-primary/30 overflow-x-hidden">
       {/* Background Pulse Simulation (120BPM = 500ms intervals) */}
@@ -34,8 +42,8 @@ export const LandingPage = ({
               }}
               transition={{ 
                 repeat: Infinity, 
-                duration: 0.5, 
-                delay: i * 0.1, // Slight offset for matrix feel
+                duration: 0.5,
+                delay: i * 0.1,
                 ease: "easeInOut" 
               }}
             />
@@ -45,12 +53,12 @@ export const LandingPage = ({
       </div>
 
       <div className="relative z-10 flex flex-col items-center">
-        
+      
         {/* Navigation / Header */}
         <nav className="w-full max-w-7xl mx-auto p-6 flex justify-between items-center border-b border-white/5">
           <div className="flex items-center gap-3">
-             <div className="w-3 h-3 bg-primary animate-pulse" />
-             <span className="font-headline text-xl font-black tracking-[0.3em] uppercase glow-text">EXTREAMIX</span>
+            <div className="w-3 h-3 bg-primary animate-pulse" />
+            <span className="font-headline text-xl font-black tracking-[0.3em] uppercase glow-text">EXTREAMIX</span>
           </div>
           <div className="font-mono text-[10px] text-outline/50 uppercase tracking-widest hidden sm:block">
             V 4.0.0 // BROWSER_NATIVE
@@ -158,13 +166,7 @@ export const LandingPage = ({
                 ENGAGE FREE (ADS)
               </button>
               <button 
-                onClick={() => {
-                  if (onPurchase) {
-                    onPurchase();
-                  } else {
-                    onInitiate();
-                  }
-                }}
+                onClick={() => onPurchase?.() || onInitiate()}
                 disabled={isPurchasing}
                 className="w-full py-4 bg-primary/20 hover:bg-primary/40 text-primary border border-primary/50 font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
               >
@@ -180,17 +182,10 @@ export const LandingPage = ({
               <div className="mb-8">
                 <div className="font-mono text-[10px] text-primary/80 uppercase tracking-widest mb-2">The Professional Rig</div>
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-primary mb-4">[STUDIO]</h3>
-                {packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly') ? (
-                  <div className="font-headline text-4xl font-black text-white">
-                    {(() => {
-                      const pkg = packages.find(p => p.identifier === 'Monthly' || p.identifier === '$rc_monthly');
-                      return pkg?.webBillingProduct?.currentPrice?.formattedPrice || pkg?.webBillingProduct?.defaultPurchaseOption?.basePrice?.formattedPrice || '$15.00';
-                    })()}
-                    <span className="text-sm text-outline font-normal"> / MO</span>
-                  </div>
-                ) : (
-                  <div className="font-headline text-4xl font-black text-white">$15 <span className="text-sm text-outline font-normal">/ MO</span></div>
-                )}
+                <div className="font-headline text-4xl font-black text-white">
+                  {getPackagePrice(['Monthly', '$rc_monthly'], '$15')}
+                  <span className="text-sm text-outline font-normal"> / MO</span>
+                </div>
               </div>
               <ul className="space-y-4 mb-12 flex-1 font-mono text-xs text-outline">
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> <span className="text-white">Everything in Pulse</span></li>
@@ -199,23 +194,17 @@ export const LandingPage = ({
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-primary shrink-0" /> Unlimited Registry Patches</li>
               </ul>
               {isPro ? (
-                 <button onClick={onInitiate} className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black">
-                    ACCESS GRANTED // ENGAGE
-                 </button>
+                <button onClick={onInitiate} className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black">
+                  ACCESS GRANTED // ENGAGE
+                </button>
               ) : (
                 <button 
-                  onClick={() => {
-                    if (onPurchase) {
-                      onPurchase();
-                    } else {
-                      onInitiate();
-                    }
-                  }}
+                  onClick={() => onPurchase?.() || onInitiate()}
                   disabled={isPurchasing}
                   className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
-                 >
+                >
                   {isPurchasing ? 'PROCESSING...' : 'VIEW PLANS & UPGRADE'}
-                 </button>
+                </button>
               )}
             </div>
 
@@ -224,17 +213,10 @@ export const LandingPage = ({
               <div className="mb-8">
                 <div className="font-mono text-[10px] text-tertiary/80 uppercase tracking-widest mb-2">The Global Bridge</div>
                 <h3 className="font-headline text-2xl font-black uppercase tracking-widest text-tertiary mb-4">[BROADCAST]</h3>
-                {packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual') ? (
-                  <div className="font-headline text-4xl font-black text-white">
-                    {(() => {
-                      const pkg = packages.find(p => p.identifier === 'Annual' || p.identifier === '$rc_annual');
-                      return pkg?.webBillingProduct?.currentPrice?.formattedPrice || pkg?.webBillingProduct?.defaultPurchaseOption?.basePrice?.formattedPrice || '$49.00';
-                    })()}
-                    <span className="text-sm text-outline font-normal"> / YR</span>
-                  </div>
-                ) : (
-                  <div className="font-headline text-4xl font-black text-white">$49 <span className="text-sm text-outline font-normal">/ MO</span></div>
-                )}
+                <div className="font-headline text-4xl font-black text-white">
+                  {getPackagePrice(['Annual', '$rc_annual'], '$49')}
+                  <span className="text-sm text-outline font-normal"> / YR</span>
+                </div>
               </div>
               <ul className="space-y-4 mb-12 flex-1 font-mono text-xs text-outline">
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> <span className="text-white">Everything in Studio</span></li>
@@ -243,23 +225,17 @@ export const LandingPage = ({
                 <li className="flex items-start gap-3"><Check className="w-4 h-4 text-tertiary shrink-0" /> URL Media Injection</li>
               </ul>
               {isPro ? (
-                 <button onClick={onInitiate} className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black">
-                    ACCESS GRANTED
-                 </button>
+                <button onClick={onInitiate} className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black">
+                  ACCESS GRANTED
+                </button>
               ) : (
                 <button 
-                  onClick={() => {
-                    if (onPurchase) {
-                      onPurchase();
-                    } else {
-                      onInitiate(); // Fallback
-                    }
-                  }}
+                  onClick={() => onPurchase?.() || onInitiate()}
                   disabled={isPurchasing}
                   className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
-                 >
+                >
                   {isPurchasing ? 'PROCESSING...' : 'VIEW PLANS & UPGRADE'}
-                 </button>
+                </button>
               )}
             </div>
           </div>
@@ -268,14 +244,14 @@ export const LandingPage = ({
         {/* Footer */}
         <footer className="w-full border-t border-white/5 py-8 mt-12">
           <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-             <div className="font-mono text-[10px] text-outline/40 uppercase tracking-widest">
-               © {new Date().getFullYear()} EXTREAMIX. All signals reserved.
-             </div>
-             <div className="flex gap-6 font-mono text-[10px] text-outline/60 uppercase tracking-widest">
-               <a href="#" className="hover:text-primary transition-colors">Documentation</a>
-               <a href="#" className="hover:text-primary transition-colors">API Reference</a>
-               <a href="#" className="hover:text-primary transition-colors">Status: ONLINE</a>
-             </div>
+            <div className="font-mono text-[10px] text-outline/40 uppercase tracking-widest">
+              © {new Date().getFullYear()} EXTREAMIX. All signals reserved.
+            </div>
+            <div className="flex gap-6 font-mono text-[10px] text-outline/60 uppercase tracking-widest">
+              <a href="#" className="hover:text-primary transition-colors">Documentation</a>
+              <a href="#" className="hover:text-primary transition-colors">API Reference</a>
+              <a href="#" className="hover:text-primary transition-colors">Status: ONLINE</a>
+            </div>
           </div>
         </footer>
 

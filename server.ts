@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import monetizationRoutes from "./src/routes/monetization.ts";
 import webhookRoutes from "./src/routes/webhooks.ts";
 import dnsRoutes from "./src/routes/dns.ts";
 
@@ -11,20 +10,35 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-  // Stripe webhook needs raw body for signature verification
-  app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), webhookRoutes);
+  // RevenueCat webhook needs raw body for signature verification
+  app.use('/api/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 
   // Standard JSON body parser for other routes
   app.use(express.json());
 
+  // Re-parse webhook body as JSON (since raw middleware consumed it)
+  app.use('/api/webhooks/revenuecat', (req, res, next) => {
+    if (typeof req.body === 'string') {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        // Not JSON, leave as-is
+      }
+    }
+    next();
+  });
+
   // API routes
-  app.use('/api/monetization', monetizationRoutes);
   app.use('/api/dns', dnsRoutes);
 
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ 
+      status: "ok",
+      monetization: "revenuecat",
+      timestamp: new Date().toISOString()
+    });
   });
 
   // Vite middleware for development
@@ -44,6 +58,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`RevenueCat webhook: POST /api/webhooks/revenuecat`);
   });
 }
 
