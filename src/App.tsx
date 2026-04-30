@@ -2381,11 +2381,11 @@ export default function App() {
 
       <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
         {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}
-        <nav className="relative w-full h-16 md:h-auto flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-4 md:overflow-y-auto custom-scrollbar">
+        <nav className="relative w-full h-16 md:h-full flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-4">
            <button onClick={() => setCurrentView('mixer')} className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4 flex-shrink-0 hover:bg-surface-container-highest transition-colors group" title="Return to Extreamix Console">
             <Music className="w-5 h-5 md:w-6 md:h-6 text-primary group-hover:scale-110 transition-transform" />
           </button>
-          <div className="flex md:flex-col w-full md:space-y-1 md:min-h-0">
+          <div className="flex justify-around md:justify-start md:flex-col w-full md:space-y-1 md:flex-1 md:overflow-y-auto custom-scrollbar md:min-h-0 overflow-x-auto md:overflow-x-hidden hide-scrollbar">
             <NavItem icon={SlidersHorizontal} label="Console" active={currentView === 'mixer'} onClick={() => setCurrentView('mixer')} />
             <NavItem icon={Video} label="Imaging" active={currentView === 'vision'} onClick={() => setCurrentView('vision')} />
             <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
