@@ -38,7 +38,8 @@ import {
   Disc,
   Wind,
   PackagePlus,
-  Wand2
+  Wand2,
+  Shield // Added Shield for Admin
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
@@ -48,6 +49,7 @@ import { videoEngine } from './services/videoEngine';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AddonsView } from './components/AddonsView';
+import { ProfileView } from './components/ProfileView';
 import { FilterDesignerView, WebGLPreview } from './components/FilterDesignerView';
 import { BroadcastView } from './components/BroadcastView';
 import { AdBanner } from './components/AdBanner';
@@ -139,6 +141,7 @@ const ImagingView = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pipVideoRef = useRef<HTMLVideoElement>(null);
   const [screens, setScreens] = useState<any[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -158,8 +161,13 @@ const ImagingView = ({
     if (canvasRef.current) {
       videoEngine.init(canvasRef.current);
       try {
+        const stream = canvasRef.current.captureStream(30);
         // @ts-ignore
-        window.extreamixMainStream = canvasRef.current.captureStream(30);
+        window.extreamixMainStream = stream;
+        
+        if (pipVideoRef.current) {
+          pipVideoRef.current.srcObject = stream;
+        }
       } catch(e) {
         console.warn("Could not capture stream from canvas", e);
       }
@@ -190,17 +198,21 @@ const ImagingView = ({
     };
   }, []);
 
-  const handleLaunchProjector = (screen?: any) => {
-    const width = 1280;
-    const height = 720;
-    const left = screen ? screen.availLeft + (screen.availWidth - width) / 2 : (window.screen.width - width) / 2;
-    const top = screen ? screen.availTop + (screen.availHeight - height) / 2 : (window.screen.height - height) / 2;
-    
-    window.open(
-      `${window.location.origin}/?projector=true`, 
-      'ImagingProjector', 
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,status=no,location=no`
-    );
+  const handleLaunchProjector = async () => {
+    try {
+      if (document.pictureInPictureEnabled && pipVideoRef.current) {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else {
+          await pipVideoRef.current.requestPictureInPicture();
+        }
+      } else {
+        alert("Picture-in-Picture is not supported in this browser.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to launch pop-out preview.");
+    }
   };
 
   const handleFullscreen = () => {
@@ -224,6 +236,7 @@ const ImagingView = ({
         ref={containerRef}
         className="w-full xl:flex-[3] aspect-video xl:aspect-auto min-h-[250px] md:min-h-[400px] xl:min-h-0 bg-[#0a0a0a] rounded-3xl border border-white/10 overflow-hidden relative group shadow-2xl flex items-center justify-center p-2 md:p-4"
       >
+        <video ref={pipVideoRef} autoPlay playsInline muted className="hidden" />
         <canvas 
           ref={canvasRef} 
           className="max-w-full max-h-full aspect-video rounded-xl shadow-2xl border border-white/10 bg-black" 
@@ -312,7 +325,7 @@ const ImagingView = ({
                   >
                     <div className="flex items-center gap-3">
                       <ExternalLink className="w-3.5 h-3.5 md:w-4 md:h-4 text-outline" />
-                      <span className="font-headline text-[9px] md:text-[10px] text-white uppercase">Pop-out</span>
+                      <span className="font-headline text-[9px] md:text-[10px] text-white uppercase">Pop-out PiP</span>
                     </div>
                   </button>
                   <button 
@@ -325,28 +338,6 @@ const ImagingView = ({
                     </div>
                   </button>
                 </div>
-
-                {screens.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="font-headline text-[8px] text-outline uppercase px-1 mt-2">Available Screens</p>
-                    {screens.map((screen, idx) => (
-                      <button 
-                        key={idx}
-                        onClick={() => handleLaunchProjector(screen)}
-                        className="flex items-center justify-between w-full bg-primary/5 hover:bg-primary/10 p-3 md:p-4 rounded-xl border border-primary/10 transition-all text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Monitor className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
-                          <div>
-                            <span className="font-headline text-[9px] text-white uppercase block">Screen {idx + 1}</span>
-                            <span className="text-[7px] md:text-[8px] text-outline">{screen.width}x{screen.height}</span>
-                          </div>
-                        </div>
-                        {screen.isPrimary && <div className="text-[6px] md:text-[7px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase font-bold">Main</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
            </div>
 
@@ -2269,10 +2260,6 @@ export default function App() {
     setSequencer(prev => ({ ...prev, steps: nextSteps }));
   };
 
-  if (isProjector) {
-    return <ProjectorView />;
-  }
-
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -2383,9 +2370,9 @@ export default function App() {
           <div className="h-8 w-[1px] bg-white/10 mx-1 md:mx-2 hidden sm:block" />
           <div className="flex items-center gap-1">
             <IconButton icon={Settings} label="General Settings" className="scale-90 md:scale-100" onClick={() => setIsSettingsOpen(true)} />
-            <div className="w-8 h-8 rounded-full border border-primary/30 ml-2 md:ml-4 overflow-hidden relative flex-shrink-0">
+            <button onClick={() => setCurrentView('profile')} className="w-8 h-8 rounded-full border border-primary/30 ml-2 md:ml-4 overflow-hidden relative flex-shrink-0 hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50">
                <img src="https://picsum.photos/seed/sonicuser/64/64" alt="User Profile Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-            </div>
+            </button>
           </div>
         </div>
       </header>
@@ -2394,11 +2381,11 @@ export default function App() {
 
       <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
         {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}
-        <nav className="relative w-full h-16 flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-8 lg:p-0">
-           <button onClick={() => setCurrentView('mixer')} className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4 hover:bg-surface-container-highest transition-colors group" title="Return to Extreamix Console">
+        <nav className="relative w-full h-16 md:h-auto flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-4 md:overflow-y-auto custom-scrollbar">
+           <button onClick={() => setCurrentView('mixer')} className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4 flex-shrink-0 hover:bg-surface-container-highest transition-colors group" title="Return to Extreamix Console">
             <Music className="w-5 h-5 md:w-6 md:h-6 text-primary group-hover:scale-110 transition-transform" />
           </button>
-          <div className="flex md:flex-col w-full md:space-y-1 md:flex-1">
+          <div className="flex md:flex-col w-full md:space-y-1 md:min-h-0">
             <NavItem icon={SlidersHorizontal} label="Console" active={currentView === 'mixer'} onClick={() => setCurrentView('mixer')} />
             <NavItem icon={Video} label="Imaging" active={currentView === 'vision'} onClick={() => setCurrentView('vision')} />
             <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
@@ -2406,12 +2393,11 @@ export default function App() {
             <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
             <NavItem icon={Wand2} label="AI Filter" active={currentView === 'filter-designer'} onClick={() => setCurrentView('filter-designer')} />
             <NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
-            <NavItem icon={Settings} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
+            <NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
           </div>
 
-          <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full">
-            <button onClick={handleAddChannel} className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all">ADD_TRK</button>
-            <NavItem icon={Settings} label="Config" active={isSettingsOpen} onClick={() => setIsSettingsOpen(true)} />
+          <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full md:pt-4 flex-shrink-0">
+            <button onClick={handleAddChannel} className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all active:scale-95">ADD_TRK</button>
           </div>
         </nav>
 
@@ -2581,6 +2567,9 @@ export default function App() {
               {currentView === 'admin' && (
                 <AdminDashboard />
               )}
+              {currentView === 'profile' && (
+                <ProfileView />
+              )}
             </motion.div>
           </AnimatePresence>
           </div>
@@ -2607,11 +2596,6 @@ export default function App() {
         <div className="flex items-center gap-6 md:gap-12">
            <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5">
               <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
-           </div>
-           
-           <div className="flex items-center gap-2">
-              <IconButton icon={Settings} label="Output Settings" className="hidden sm:flex" />
-              <IconButton icon={Zap} label="Quick Actions" />
            </div>
         </div>
       </footer>

@@ -44,6 +44,20 @@ const ADDONS = [
       'True 3D Panning',
       'HRTF Binaural Output'
     ]
+  },
+  {
+    id: 'ai_theme_forge',
+    name: 'AI Theme Forge',
+    description: 'Describe any aesthetic, mood, or setting, and let our generative AI construct a completely custom color palette and apply it instantly to the application interface.',
+    icon: Sparkles,
+    rcIdentifier: 'ai_theme_forge',
+    price: '$2.99 (Lifetime)',
+    features: [
+      'Text-to-Theme AI Generation',
+      'Intelligent Color Mixing',
+      'Saved Custom Palettes',
+      'Instant Global Application'
+    ]
   }
 ];
 
