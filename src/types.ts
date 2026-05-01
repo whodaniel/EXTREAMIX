@@ -1,4 +1,4 @@
-export type View = 'mixer' | 'filters' | 'routing' | 'library' | 'vision' | 'admin' | 'addons' | 'filter-designer' | 'profile';
+export type View = 'mixer' | 'filters' | 'routing' | 'library' | 'vision' | 'admin' | 'addons' | 'filter-designer' | 'profile' | 'landing';
 
 export interface Point {
   x: number;

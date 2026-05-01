@@ -1614,9 +1614,21 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('mixer');
   
  // RevenueCat State via centralized hook
- const subscription = useSubscription();
- const { isPro, activeEntitlements, packages, isPurchasing, purchase, purchaseAddon, openManagement, hasEntitlement } = subscription;
-  
+  const subscription = useSubscription();
+  const { isPro, activeEntitlements, packages, isPurchasing, purchase, purchaseAddon, openManagement, hasEntitlement } = subscription;
+
+  // Admin detection: only show admin section if the current RC user ID matches the admin ID
+  const adminUserId = import.meta.env.VITE_ADMIN_USER_ID || '';
+  const currentRcUserId = localStorage.getItem('extreamix_rc_user_id') || '';
+  const isAdmin = adminUserId && currentRcUserId === adminUserId;
+
+  // If admin view was selected but user is not admin, redirect to mixer
+  useEffect(() => {
+    if (currentView === 'admin' && !isAdmin) {
+      setCurrentView('mixer');
+    }
+  }, [currentView, isAdmin]);
+
   // Subdomain Routing State
   const [subdomain, setSubdomain] = useState<string | null>(null);
 
@@ -2297,17 +2309,18 @@ isPurchasing={isPurchasing}
           </div>
           <nav className="hidden xl:flex items-center gap-8">
             {['PROJ_INF', 'EXP_LOG', 'SYS_CFG'].map((item, i) => (
-              <button 
-                key={item} 
+<button
+key={item}
 onClick={() => {
- if (item === 'SYS_CFG') setIsSettingsOpen(true);
- else if (!isPro) {
- purchase();
- } else {
- alert(item + " module loading...");
- }}
-                className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
-              >
+if (item === 'SYS_CFG') setIsSettingsOpen(true);
+else if (!isPro) {
+purchase();
+} else {
+alert(item + " module loading...");
+}
+}}
+className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
+>
                 {item}
               </button>
             ))}
@@ -2380,8 +2393,10 @@ onClick={() => {
  setCurrentView('filter-designer');
  }
  }} />
-            <NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
-            <NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
+<NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
+{isAdmin && (
+<NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
+)}
           </div>
 
           <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full md:pt-4 flex-shrink-0">
