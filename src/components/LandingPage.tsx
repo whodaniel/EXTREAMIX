@@ -166,7 +166,7 @@ export const LandingPage = ({
                 ENGAGE FREE (ADS)
               </button>
               <button 
-                onClick={() => onPurchase?.() || onInitiate()}
+                onClick={() => { if (onPurchase) onPurchase(); else onInitiate(); }}
                 disabled={isPurchasing}
                 className="w-full py-4 bg-primary/20 hover:bg-primary/40 text-primary border border-primary/50 font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
               >
@@ -199,7 +199,7 @@ export const LandingPage = ({
                 </button>
               ) : (
                 <button 
-                  onClick={() => onPurchase?.() || onInitiate()}
+                  onClick={() => { if (onPurchase) onPurchase(); else onInitiate(); }}
                   disabled={isPurchasing}
                   className="w-full py-4 bg-primary hover:bg-white text-black font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
                 >
@@ -230,7 +230,7 @@ export const LandingPage = ({
                 </button>
               ) : (
                 <button 
-                  onClick={() => onPurchase?.() || onInitiate()}
+                  onClick={() => { if (onPurchase) onPurchase(); else onInitiate(); }}
                   disabled={isPurchasing}
                   className="w-full py-4 border border-tertiary/40 hover:bg-tertiary/10 text-tertiary font-headline text-xs uppercase tracking-widest transition-colors font-black disabled:opacity-50"
                 >

@@ -2305,7 +2305,7 @@ onClick={() => {
  purchase();
  } else {
  alert(item + " module loading...");
- }}
+ }}}
                 className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
               >
                 {item}

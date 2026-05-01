@@ -162,7 +162,9 @@ export async function getSubscriptionDetails(): Promise<{
 
     // Get expiration/renewal info from the Pro entitlement
     const proEntitlement = customerInfo.entitlements.active[ENTITLEMENTS.PRO];
-    const expirationDate = proEntitlement?.expirationDate || null;
+    const expirationDate = proEntitlement?.expirationDate
+      ? new Date(proEntitlement.expirationDate).toISOString()
+      : null;
     const willRenew = proEntitlement?.willRenew || false;
     const managementURL = customerInfo.managementURL || null;
 
