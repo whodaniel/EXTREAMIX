@@ -49,9 +49,10 @@ class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterLimiter: DynamicsCompressorNode | null = null;
-  private masterAnalyser: AnalyserNode | null = null;
-  private masterFX: MasterFXNodes | null = null;
-  private channels: Map<string, ChannelNodes> = new Map();
+ private masterAnalyser: AnalyserNode | null = null;
+ private streamDestination: MediaStreamAudioDestinationNode | null = null;
+ private masterFX: MasterFXNodes | null = null;
+ private channels: Map<string, ChannelNodes> = new Map();
   private activeStreamSources: Map<string, MediaStreamAudioSourceNode> = new Map();
   
   private crossoverRouting: Record<string, string[]> = {
@@ -211,11 +212,14 @@ class AudioEngine {
     this.masterAnalyser = this.ctx.createAnalyser();
     this.masterAnalyser.fftSize = 256;
     
-    this.masterGain.connect(this.masterLimiter);
-    this.masterLimiter.connect(this.masterAnalyser);
-    this.masterAnalyser.connect(this.ctx.destination);
+ this.masterGain.connect(this.masterLimiter);
+ this.masterLimiter.connect(this.masterAnalyser);
+ this.masterAnalyser.connect(this.ctx.destination);
 
-    const checkLimiter = () => {
+ this.streamDestination = this.ctx.createMediaStreamDestination();
+ this.masterAnalyser.connect(this.streamDestination);
+
+ const checkLimiter = () => {
       if (this.masterLimiter && this.onLimiterActive) {
         this.onLimiterActive(this.masterLimiter.reduction < -0.1);
       }
@@ -713,8 +717,12 @@ class AudioEngine {
     // Division: 4 = 1/4 note (1 beat), 8 = 1/8 note (0.5 beats), 16 = 1/16 note (0.25 beats)
     const beatsPerStep = 4 / track.division;
     state.nextNoteTime += beatsPerStep * secondsPerBeat;
-    state.currentStep = (state.currentStep + 1) % track.length;
-  }
+ state.currentStep = (state.currentStep + 1) % track.length;
+ }
+
+ getAudioStream(): MediaStream | null {
+ return this.streamDestination?.stream ?? null;
+ }
 }
 
 export const audioEngine = new AudioEngine();

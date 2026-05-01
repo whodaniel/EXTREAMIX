@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Play, 
   Square, 
@@ -42,11 +42,13 @@ import {
   Shield // Added Shield for Admin
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState } from './types';
+import { View, ChannelState, SequencerState, RoutingSource, VideoSource, RoutingDestination, RoutingConnection, CrossoverState, MatrixMapping, RegistryPreset, PulseTrack, FXState, CustomVideoFilter } from './types';
 import { useSubscription } from './hooks/useSubscription';
 import { ENTITLEMENTS } from './services/revenueCat';
 import { audioEngine } from './services/audioEngine';
 import { videoEngine } from './services/videoEngine';
+import { midiService } from './services/MidiService';
+import { useCaptureRig } from './hooks/useCaptureRig';
 import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AddonsView } from './components/AddonsView';
@@ -137,7 +139,7 @@ const ImagingView = ({
   sequencer: SequencerState,
   cameraFacingMode: 'user' | 'environment',
   setCameraFacingMode: (mode: 'user' | 'environment') => void,
-  customFilters: import('./types').CustomVideoFilter[]
+  customFilters: CustomVideoFilter[]
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -240,6 +242,7 @@ const ImagingView = ({
         <video ref={pipVideoRef} autoPlay playsInline muted className="hidden" />
         <canvas 
           ref={canvasRef} 
+          id="extreamix-canvas" // Added ID for capture rig
           className="max-w-full max-h-full aspect-video rounded-xl shadow-2xl border border-white/10 bg-black" 
           width={1920} height={1080} 
           role="img" 
@@ -497,150 +500,73 @@ const ImagingView = ({
                     </div>
                     <select 
                       multiple
-                      value={source.pulseRouting || []}
-                      onChange={e => {
-                        const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
-                        onUpdate(source.id, { pulseRouting: vals });
-                      }}
-                      className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1 text-[9px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-mono uppercase tracking-wider h-[24px] custom-scrollbar focus:ring-1 focus:ring-primary/40 leading-tight block truncate"
+                      value={source.pulseRouting}
+                      onChange={e => onUpdate(source.id, { pulseRouting: Array.from(e.target.selectedOptions, option => option.value) })}
+                      className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1 text-[9px] text-primary outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider custom-scrollbar"
+                      style={{ height: '70px' }}
                     >
-                      {sequencer.tracks.map(t => (
-                        <option key={t.id} value={t.id} className="p-0.5">{t.name}</option>
-                      ))}
+                      <optgroup label="Audio Tracks" className="bg-surface-container">
+                        {channels.map(c => <option key={c.id} value={`channel-${c.id}`}>{c.name}</option>)}
+                      </optgroup>
+                      <optgroup label="Sequencer Tracks" className="bg-surface-container">
+                        {sequencer.tracks.map(t => <option key={t.id} value={`sequencer-${t.id}`}>{t.name}</option>)}
+                      </optgroup>
                     </select>
                   </div>
-                </div>
-
-                <div className="space-y-1" onPointerDown={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-2 font-headline text-[8px] text-outline uppercase tracking-wider">
-                    <Volume2 className="w-2 h-2 text-primary" />
-                    <span>Audio Routing Bus</span>
+                  <div className="space-y-1">
+                    <div className="font-headline text-[8px] text-outline uppercase tracking-wider">Pitch Correct</div>
+                    <input 
+                      type="range" min="0" max="1" step="0.01" value={source.pitchCorrection}
+                      onChange={e => onUpdate(source.id, { pitchCorrection: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer touch-none"
+                    />
                   </div>
-                  <select 
-                    value={source.audioChannelId || ''}
-                    onChange={e => onUpdate(source.id, { audioChannelId: e.target.value })}
-                    className="w-full bg-surface-container-highest border border-white/5 rounded-xl px-2 py-1.5 text-[9px] text-white outline-none cursor-pointer hover:border-primary/30 transition-all font-headline font-bold uppercase tracking-wider"
-                  >
-                    <option value="">NO_ROUTING</option>
-                    {channels.map(ch => (
-                      <option key={ch.id} value={ch.id}>OUTPUT: {ch.name}</option>
-                    ))}
-                  </select>
                 </div>
               </Reorder.Item>
-            );
-            })}
-            </Reorder.Group>
-
-           {sources.length === 0 && (
-             <div className="py-20 text-center text-outline">
-               <Video className="w-16 h-16 mx-auto mb-6 opacity-10" />
-               <p className="font-headline text-xs uppercase tracking-[0.3em] font-black opacity-30">NO_VISUAL_INPUT</p>
-             </div>
-           )}
-        </div>
+            ))}</Reorder.Group>
+         </div>
       </aside>
     </div>
   );
 };
 
-const VUMeter = ({ analyser, orientation = 'vertical', className = "" }: { analyser?: AnalyserNode | null, orientation?: 'vertical' | 'horizontal', className?: string }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !analyser) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationId: number;
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    const draw = () => {
-      analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate RMS or Peak level
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / dataArray.length;
-      const level = Math.min(1, average / 128); // Normalized level
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const segments = 12;
-      const gap = 2;
-      
-      if (orientation === 'vertical') {
-        const segHeight = (canvas.height - (segments - 1) * gap) / segments;
-        for (let i = 0; i < segments; i++) {
-          const threshold = (i + 1) / segments;
-          const isActive = level >= threshold;
-          
-          let color = '#38bdf8'; // Blue
-          if (i > segments * 0.8) color = '#f87171'; // Red (peak)
-          else if (i > segments * 0.6) color = '#fbbf24'; // Yellow (warning)
-
-          ctx.fillStyle = isActive ? color : 'rgba(255, 255, 255, 0.05)';
-          if (isActive) {
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = color;
-          } else {
-            ctx.shadowBlur = 0;
-          }
-          
-          ctx.fillRect(0, canvas.height - (i + 1) * (segHeight + gap), canvas.width, segHeight);
-        }
-      } else {
-        const segWidth = (canvas.width - (segments - 1) * gap) / segments;
-        for (let i = 0; i < segments; i++) {
-          const threshold = (i + 1) / segments;
-          const isActive = level >= threshold;
-          
-          let color = '#38bdf8';
-          if (i > segments * 0.8) color = '#f87171';
-          else if (i > segments * 0.6) color = '#fbbf24';
-
-          ctx.fillStyle = isActive ? color : 'rgba(255, 255, 255, 0.05)';
-          ctx.fillRect(i * (segWidth + gap), 0, segWidth, canvas.height);
-        }
-      }
-
-      animationId = requestAnimationFrame(draw);
-    };
-
-    draw();
-    return () => cancelAnimationFrame(animationId);
-  }, [analyser, orientation]);
-
-  return <canvas ref={canvasRef} width={orientation === 'vertical' ? 12 : 120} height={orientation === 'vertical' ? 120 : 12} className={className} />;
-};
-
-const ConsoleView = ({ 
-  channels, 
-  updateChannel, 
-  transcripts, 
+const ConsoleView = ({
+  channels,
+  updateChannel,
+  transcripts,
   masterLimiterActive,
   crossoverGates,
   toggleCrossoverGate,
   onTranscribe,
   isTranscribing,
   sequencer,
-  setSequencer
-}: { 
-  channels: ChannelState[], 
-  updateChannel: (id: string, state: Partial<ChannelState>) => void, 
-  transcripts: string[],
-  masterLimiterActive: boolean,
-  crossoverGates: CrossoverState,
-  toggleCrossoverGate: (gate: keyof CrossoverState) => void,
-  onTranscribe: () => void,
-  isTranscribing: boolean,
-  sequencer: SequencerState,
-  setSequencer: React.Dispatch<React.SetStateAction<SequencerState>>
+  setSequencer,
+  // MIDI Learn Props
+  learningId,
+  setLearningId,
+  handleLearnMapping,
+}: {
+  channels: ChannelState[];
+  updateChannel: (id: string, state: Partial<ChannelState>) => void;
+  transcripts: string[];
+  masterLimiterActive: boolean;
+  crossoverGates: CrossoverState;
+  toggleCrossoverGate: (gate: keyof CrossoverState) => void;
+  onTranscribe: () => void;
+  isTranscribing: boolean;
+  sequencer: SequencerState;
+  setSequencer: React.Dispatch<React.SetStateAction<SequencerState>>;
+  // MIDI Learn Props
+  learningId: string | null;
+  setLearningId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleLearnMapping: (mappingId: string) => Promise<void>;
 }) => {
   const mixerCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const { isRecording, startCapture, stopCapture } = useCaptureRig(
+    'extreamix-canvas', 
+    audioEngine.getAudioStream()
+  );
 
   useEffect(() => {
     const canvas = mixerCanvasRef.current;
@@ -695,247 +621,145 @@ const ConsoleView = ({
            <div className="flex items-center gap-6">
               {/* Master Volume Fader */}
               <div className="flex flex-col items-center gap-1 bg-black/40 border border-white/5 px-4 py-1.5 rounded-2xl">
-                <div className="flex items-center gap-3">
-                  <Volume2 className="w-3 h-3 text-primary" />
-                  <input 
-                    type="range" min="0" max="1.5" step="0.01" 
-                    value={sequencer.masterVolume}
-                    onChange={e => {
-                       const val = parseFloat(e.target.value);
-                       audioEngine.setMasterVolume(val);
-                       setSequencer(prev => ({ ...prev, masterVolume: val }));
-                    }}
-                    className="w-24 h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer"
-                  />
-                </div>
-                <span className="font-mono text-[7px] text-outline uppercase font-bold tracking-widest whitespace-nowrap">MASTER_OUT: {Math.round(sequencer.masterVolume * 100)}%</span>
-              </div>
-
-              {/* Master Limiter LED */}
-              <div className="flex bg-black/40 border border-white/5 px-3 py-1.5 rounded-full items-center gap-2 relative">
-                <span className="font-mono text-[8px] tracking-widest text-outline uppercase font-bold">BRICKWALL</span>
-                <div className={`w-2 h-2 rounded-full transition-colors duration-100 ${masterLimiterActive ? 'bg-error shadow-[0_0_15px_#f87171]' : 'bg-surface-container-highest'}`} />
-              </div>
-              <div className="flex items-center gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                 <span className="font-mono text-[9px] text-primary font-black uppercase">LIVE_MIX</span>
+                 <span className="font-headline text-[7px] text-outline tracking-widest uppercase mb-2">Master</span>
+                 <input 
+                   type="range" min="0" max="1" step="0.01" 
+                   value={sequencer.masterVolume}
+                   onChange={e => {
+                     const val = parseFloat(e.target.value);
+                     setSequencer(prev => ({ ...prev, masterVolume: val }));
+                   }}
+                   className="h-24 w-2 appearance-none bg-surface-container-highest rounded-full accent-primary cursor-pointer"
+                   style={{ writingMode: 'vertical-lr', direction: 'rtl' } as any}
+                 />
               </div>
            </div>
         </div>
-        <div className="flex-1 flex gap-4 md:gap-6 overflow-x-auto pb-6 custom-scrollbar scroll-smooth">
+
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto min-h-0 pb-10 custom-scrollbar pr-2">
           {channels.map(channel => (
-            <div key={channel.id} className="w-56 md:w-64 flex-shrink-0 bg-surface-container-low/80 backdrop-blur-md rounded-2xl p-4 md:p-5 flex flex-col gap-6 border border-white/5 hover:border-primary/20 transition-all group relative focus-within:ring-2 focus-within:ring-primary/30 outline-none">
-              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
+            <div key={channel.id} className="flex flex-col gap-4 bg-surface-container-high/60 border border-white/5 p-4 rounded-3xl relative group backdrop-blur-md shadow-lg">
+              <div className="absolute top-0 right-0 p-3 opacity-20"><Music className="w-4 h-4 text-primary" /></div>
               
               {/* Channel Header */}
-              <div className="flex flex-col items-center z-10 w-full px-2">
-                <div className="w-full flex justify-between items-center mb-1">
-                   <div className="font-headline text-[9px] text-outline tracking-[0.3em] uppercase" aria-hidden="true">CH_{channel.id.split('-')[1] || '0'}</div>
-                   <div className="flex gap-1">
-                     {(channel.fx.delay.active || channel.fx.reverb.active || channel.fx.chorus.active || channel.fx.phaser.active) && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" title="FX Active" />}
-                     {(channel.eq.low !== 0 || channel.eq.mid !== 0 || channel.eq.high !== 0) && <div className="w-1.5 h-1.5 rounded-full bg-tertiary" title="EQ Filtering Active" />}
-                   </div>
+              <div className="flex items-center justify-between z-10">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                    <Volume2 className="w-4 h-4 text-primary" />
+                  </div>
+                  <h4 className="font-headline text-sm text-white font-black uppercase glow-text">{channel.name}</h4>
                 </div>
-                <h4 className="font-headline text-sm text-white font-black uppercase truncate w-full text-center glow-text">{channel.name}</h4>
-              </div>
-              
-              {/* Main Controls Split */}
-              <div className="flex gap-4 z-10 h-64">
-                {/* VU Meter & Volume Fader Block */}
-                <div className="flex bg-surface-container-lowest/50 rounded-xl p-2 items-stretch gap-2">
-                   {/* Channel VU Meter */}
-                   <VUMeter 
-                    analyser={audioEngine.getChannelAnalyser(channel.id)} 
-                    orientation="vertical" 
-                    className="w-1.5 h-full opacity-80" 
-                   />
-                   
-                   {/* Volume Fader */}
-                   <div className="w-8 flex flex-col items-center">
-                      <input 
-                       type="range" min="0" max="1" step="0.01" value={channel.volume}
-                       aria-label={`Volume for ${channel.name}`}
-                       onChange={e => updateChannel(channel.id, { volume: parseFloat(e.target.value) })}
-                        className="h-full w-1 appearance-none bg-surface-container-highest rounded-full accent-primary cursor-pointer focus:ring-2 focus:ring-primary/50"
-                        style={{ writingMode: 'vertical-lr', direction: 'rtl', touchAction: 'none' } as any}
-                     />
-                     <div className="mt-2 font-mono text-[8px] text-outline uppercase" aria-hidden="true">VOL</div>
-                   </div>
-                </div>
-
-                {/* 3D Panner XY Pad */}
-                <div className="flex-1 bg-surface-container-lowest/50 rounded-xl p-3 flex flex-col gap-2">
-                   <div className="flex justify-between font-headline text-[8px] text-outline uppercase tracking-widest leading-none">
-                      <span>3D_SPATIAL</span>
-                      <span className="text-primary" aria-label={`3D Position coordinate: ${channel.pan.toFixed(2)}, ${channel.depth.toFixed(2)}`}>{channel.pan.toFixed(2)}, {channel.depth.toFixed(2)}</span>
-                   </div>
-                   <div 
-                    tabIndex={0}
-                    role="slider"
-                    aria-label={`3D Position for ${channel.name}. Use arrow keys to move or touch drag.`}
-                    aria-valuemin={-1}
-                    aria-valuemax={1}
-                    aria-valuenow={channel.pan}
-                    onKeyDown={(e) => {
-                      const step = 0.1;
-                      if (e.key === 'ArrowLeft') updateChannel(channel.id, { pan: Math.max(-1, channel.pan - step) });
-                      if (e.key === 'ArrowRight') updateChannel(channel.id, { pan: Math.min(1, channel.pan + step) });
-                      if (e.key === 'ArrowUp') updateChannel(channel.id, { depth: Math.max(-1, channel.depth - step) });
-                      if (e.key === 'ArrowDown') updateChannel(channel.id, { depth: Math.min(1, channel.depth + step) });
-                    }}
-                    className="flex-1 relative bg-black/60 rounded-lg border border-white/5 overflow-hidden group/pad cursor-crosshair shadow-inner focus:ring-2 focus:ring-primary/50 touch-none"
-                    onPointerDown={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                      const z = ((e.clientY - rect.top) / rect.height) * 2 - 1;
-                      updateChannel(channel.id, { pan: x, depth: z });
-                    }}
-                    onPointerMove={(e) => {
-                      if (e.buttons === 1 || e.pointerType === 'touch') {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                        const z = ((e.clientY - rect.top) / rect.height) * 2 - 1;
-                        updateChannel(channel.id, { pan: Math.max(-1, Math.min(1, x)), depth: Math.max(-1, Math.min(1, z)) });
-                      }
-                    }}
-                   >
-                     {/* Background Grid */}
-                     <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 opacity-[0.03]">
-                        {[...Array(16)].map((_, i) => <div key={i} className="border border-white" />)}
-                     </div>
-
-                     {/* Horizontal/Vertical center lines */}
-                     <div className="absolute top-1/2 left-0 w-full h-[1px] bg-primary/20" />
-                     <div className="absolute left-1/2 top-0 h-full w-[1px] bg-primary/20" />
-                     
-                     {/* Directional Labels */}
-                     <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[6px] text-outline/40 font-black tracking-widest uppercase">FRONT</div>
-                     <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] text-outline/40 font-black tracking-widest uppercase">BACK</div>
-                     <div className="absolute left-1 top-1/2 -translate-y-1/2 -rotate-90 origin-center text-[6px] text-outline/40 font-black tracking-widest uppercase">LEFT</div>
-                     <div className="absolute right-1 top-1/2 -translate-y-1/2 rotate-90 origin-center text-[6px] text-outline/40 font-black tracking-widest uppercase">RIGHT</div>
-
-                     {/* Current Position Indicator */}
-                     <motion.div 
-                      className="absolute rounded-full bg-primary/20 border border-primary/60 flex items-center justify-center -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none"
-                      animate={{ 
-                        left: `${(channel.pan + 1) * 50}%`, 
-                        top: `${(channel.depth + 1) * 50}%`,
-                        scale: 1 - (channel.depth * 0.3),
-                        width: '24px',
-                        height: '24px',
-                        boxShadow: `0 0 ${20 - channel.depth * 10}px rgba(56, 189, 248, ${0.4 + channel.depth * -0.2})`
-                      }}
-                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                     >
-                       <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_white]" />
-                     </motion.div>
-                   </div>
-                </div>
+                <IconButton 
+                  icon={Trash2} 
+                  label="Remove Channel" 
+                  onClick={() => updateChannel(channel.id, { active: false })} 
+                  className="text-error hover:bg-error/20" 
+                />
               </div>
 
-              {/* Parametric EQ Section */}
-              <div className="grid grid-cols-3 gap-2 z-10">
-                {[
-                  { key: 'low' as const, label: 'LOW', color: 'accent-error' },
-                  { key: 'mid' as const, label: 'MID', color: 'accent-tertiary' },
-                  { key: 'high' as const, label: 'HIGH', color: 'accent-primary' }
-                ].map(eq => (
-                  <div key={eq.key} className="flex flex-col items-center gap-1">
+              {/* Channel Volume Fader */}
+              <div className="flex-1 flex gap-2 z-10 min-h-0">
+                 <div className="flex-1 bg-black/40 rounded-2xl p-2 flex items-stretch gap-2 border border-white/5">
+                    <VUMeter analyser={audioEngine.getChannelAnalyser(channel.id)} orientation="vertical" className="w-1.5 h-full opacity-100" />
+                    
+                    <div className="flex-1 flex flex-col items-center relative">
+                       <input 
+                        type="range" min="0" max="1.5" step="0.01" 
+                        value={channel.volume}
+                        onChange={e => {
+                           const val = parseFloat(e.target.value);
+                           updateChannel(channel.id, { volume: val });
+                        }}
+                        className="h-full w-2 appearance-none bg-surface-container-highest rounded-full accent-primary cursor-pointer"
+                        style={{ writingMode: 'vertical-lr', direction: 'rtl' } as any}
+                      />
+                    </div>
+                 </div>
+
+                 {/* Channel FX Shortcuts */}
+                 <div className="w-8 flex flex-col justify-around bg-black/40 rounded-xl py-2 border border-white/5">
+                    {[ 
+                      { id: 'delay' as const, icon: Clock, label: 'DLY' },
+                      { id: 'reverb' as const, icon: Waves, label: 'RVB' },
+                      { id: 'chorus' as const, icon: Disc, label: 'CHO' },
+                      { id: 'phaser' as const, icon: Wind, label: 'PHS' }
+                    ].map(fx => (
+                      <button
+                        key={fx.id}
+                        onClick={() => {
+                           const current = channel.fx[fx.id];
+                           updateChannel(channel.id, { 
+                             fx: { ...channel.fx, [fx.id]: { ...current, active: !current.active } } 
+                           });
+                        }}
+                        title={fx.label}
+                        className={`p-1.5 rounded-md transition-all flex flex-col items-center gap-0.5 ${channel.fx[fx.id].active ? 'bg-primary text-on-primary shadow-[0_0_8px_#38bdf8]' : 'bg-white/5 text-outline opacity-40 hover:opacity-100'}`}
+                      >
+                         <fx.icon className="w-3 h-3" />
+                         <span className="text-[6px] font-black">LERN</span>
+                      </button>
+                    )))}
+                 </div>
+              </div>
+
+              {/* Detailed FX Controls (mini) */}
+              <div className="z-10 grid grid-cols-2 gap-2 bg-surface-container-lowest/30 p-2 rounded-xl">
+                 <div className="flex flex-col gap-1">
+                    <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (P)</div>
                     <input 
-                      type="range" min="-12" max="12" step="0.1" value={channel.eq[eq.key]}
-                      onChange={e => updateChannel(channel.id, { eq: { ...channel.eq, [eq.key]: parseFloat(e.target.value) } })}
-                      className={`w-full h-1 bg-surface-container-highest appearance-none rounded-full ${eq.color} cursor-pointer`}
-                      style={{ touchAction: 'none' }}
+                      type="range" min="0" max="1" step="0.01" value={channel.pitchCorrection}
+                      onChange={e => updateChannel(channel.id, { pitchCorrection: parseFloat(e.target.value) })}
+                      className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
                     />
-                    <div className="font-headline text-[7px] text-outline uppercase font-black">{eq.label}</div>
-                    <div className="font-mono text-[7px] text-primary">{channel.eq[eq.key] > 0 ? '+' : ''}{channel.eq[eq.key].toFixed(1)}</div>
-                  </div>
-                ))}
+                 </div>
+                 <div className="flex flex-col gap-1">
+                    <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (B)</div>
+                    <input 
+                      type="range" min="0" max="1" step="0.01" value={channel.beatCorrection}
+                      onChange={e => updateChannel(channel.id, { beatCorrection: parseFloat(e.target.value) })}
+                      className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
+                    />
+                 </div>
               </div>
 
-              {/* Solo/Mute */}
-              <div className="grid grid-cols-2 gap-2 z-10">
-                <button 
-                  onClick={() => updateChannel(channel.id, { mute: !channel.mute })}
-                  aria-pressed={channel.mute}
-                  className={`py-2 rounded-lg font-headline text-[10px] uppercase font-black transition-all ${channel.mute ? 'bg-error text-on-error shadow-[0_0_10px_rgba(255,180,171,0.3)]' : 'bg-surface-container-highest text-outline hover:text-white'}`}
-                >
-                  MUTE
-                </button>
-                <button 
-                  onClick={() => updateChannel(channel.id, { solo: !channel.solo })}
-                  aria-pressed={channel.solo}
-                  className={`py-2 rounded-lg font-headline text-[10px] uppercase font-black transition-all ${channel.solo ? 'bg-tertiary text-on-tertiary shadow-[0_0_10px_rgba(86,229,169,0.3)]' : 'bg-surface-container-highest text-outline hover:text-white'}`}
-                >
-                  SOLO
-                </button>
-              </div>
-
-                {/* Pulse Latch */}
-                <div className="z-10 bg-black/20 p-2 rounded-xl border border-white/5 flex flex-col gap-1">
-                  <div className="font-headline text-[7px] text-outline uppercase tracking-wider flex justify-between">
-                    <span>SIGNAL_GATE</span>
-                    {channel.pulseRouting && channel.pulseRouting.length > 0 && <span className="text-primary animate-pulse font-black">QUANTIZED</span>}
-                  </div>
-                  <select 
-                    multiple
-                    value={channel.pulseRouting || []}
-                    onChange={e => {
-                      const vals = Array.from(e.target.selectedOptions).map((option: any) => option.value);
-                      updateChannel(channel.id, { pulseRouting: vals });
-                    }}
-                    className="w-full bg-transparent border-none text-[8px] text-white outline-none cursor-pointer font-mono uppercase tracking-tighter min-h-[40px] custom-scrollbar focus:ring-0"
-                  >
-                    {sequencer.tracks.map(t => (
-                      <option key={t.id} value={t.id} className="py-0.5">{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* FX Shortcut Bar */}
-                <div className="z-10 bg-black/40 p-2 rounded-xl border border-white/5 flex justify-around">
-                   {[
-                     { id: 'delay' as const, icon: Clock, label: 'DLY' },
-                     { id: 'reverb' as const, icon: Waves, label: 'RVB' },
-                     { id: 'chorus' as const, icon: Disc, label: 'CHO' },
-                     { id: 'phaser' as const, icon: Wind, label: 'PHS' }
-                   ].map(fx => (
-                     <button
-                       key={fx.id}
-                       onClick={() => {
-                          const current = channel.fx[fx.id];
-                          updateChannel(channel.id, { 
-                            fx: { ...channel.fx, [fx.id]: { ...current, active: !current.active } } 
-                          });
-                       }}
-                       title={fx.label}
-                       className={`p-1.5 rounded-md transition-all flex flex-col items-center gap-0.5 ${channel.fx[fx.id].active ? 'bg-primary text-on-primary shadow-[0_0_8px_#38bdf8]' : 'bg-white/5 text-outline opacity-40 hover:opacity-100'}`}
-                     >
-                        <fx.icon className="w-3 h-3" />
-                        <span className="text-[6px] font-black">{fx.label}</span>
-                     </button>
-                   ))}
-                </div>
-
-                {/* Detailed FX Controls (mini) */}
-                <div className="z-10 grid grid-cols-2 gap-2 bg-surface-container-lowest/30 p-2 rounded-xl">
-                   <div className="flex flex-col gap-1">
-                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (P)</div>
-                      <input 
-                        type="range" min="0" max="1" step="0.01" value={channel.pitchCorrection}
-                        onChange={e => updateChannel(channel.id, { pitchCorrection: parseFloat(e.target.value) })}
-                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
-                      />
+               {/* EQ Controls */}
+               <div className="flex items-end gap-3 z-10 bg-surface-container-lowest/30 p-2 rounded-xl">
+                 <div className="font-headline text-[9px] text-white uppercase tracking-wider font-bold -rotate-90 origin-bottom-left whitespace-nowrap hidden lg:block">EQ</div>
+                 {[ 
+                   { key: 'low' as const, label: 'LOW', color: 'accent-secondary' },
+                   { key: 'mid' as const, label: 'MID', color: 'accent-tertiary' },
+                   { key: 'high' as const, label: 'HIGH', color: 'accent-primary' }
+                 ].map(eq => (
+                   <div key={eq.key} className="flex flex-col items-center gap-1">
+                     <input 
+                       type="range" min="-12" max="12" step="0.1" value={channel.eq[eq.key]}
+                       onChange={e => updateChannel(channel.id, { eq: { ...channel.eq, [eq.key]: parseFloat(e.target.value) } })}
+                       className={`w-full h-1 bg-surface-container-highest appearance-none rounded-full ${eq.color} cursor-pointer`}
+                       style={{ touchAction: 'none' }}
+                     />
+                     <div className="font-headline text-[7px] text-outline uppercase font-black">LERN</div>
+                     <div className="font-mono text-[7px] text-primary">{channel.eq[eq.key] > 0 ? '+' : ''}{channel.eq[eq.key].toFixed(1)}</div>
                    </div>
-                   <div className="flex flex-col gap-1">
-                      <div className="font-headline text-[6px] text-outline uppercase tracking-widest">FIX_AMT (B)</div>
-                      <input 
-                        type="range" min="0" max="1" step="0.01" value={channel.beatCorrection}
-                        onChange={e => updateChannel(channel.id, { beatCorrection: parseFloat(e.target.value) })}
-                        className="w-full h-0.5 bg-surface-container-highest appearance-none rounded-full accent-tertiary cursor-pointer touch-none"
-                      />
-                   </div>
-                </div>
+                 ))}
+               </div>
+
+               {/* Solo/Mute */}
+               <div className="grid grid-cols-2 gap-2 z-10">
+                 <button 
+                   onClick={() => updateChannel(channel.id, { mute: !channel.mute })}
+                   aria-pressed={channel.mute}
+                   className={`py-2 rounded-lg font-headline text-[10px] uppercase font-black transition-all ${channel.mute ? 'bg-error text-on-error shadow-[0_0_10px_rgba(255,180,171,0.3)]' : 'bg-surface-container-highest text-outline hover:text-white'}`}
+                 >
+                   MUTE
+                 </button>
+                 <button 
+                   onClick={() => updateChannel(channel.id, { solo: !channel.solo })}
+                   aria-pressed={channel.solo}
+                   className={`py-2 rounded-lg font-headline text-[10px] uppercase font-black transition-all ${channel.solo ? 'bg-tertiary text-on-tertiary-container shadow-[0_0_10px_rgba(86,229,169,0.3)]' : 'bg-surface-container-highest text-outline hover:text-white'}`}
+                 >
+                   SOLO
+                 </button>
+               </div>
             </div>
           ))}
 
@@ -969,7 +793,7 @@ const ConsoleView = ({
 
                  {/* MASTER FX SHORTCUTS */}
                  <div className="w-8 flex flex-col justify-around bg-black/40 rounded-xl py-2 border border-white/5">
-                    {[
+                    {[ 
                        { id: 'delay' as const, icon: Clock, label: 'DLY' },
                        { id: 'reverb' as const, icon: Waves, label: 'RVB' },
                        { id: 'chorus' as const, icon: Disc, label: 'CHO' },
@@ -977,416 +801,210 @@ const ConsoleView = ({
                     ].map(fx => {
                        const isActive = sequencer.masterFX[fx.id].active;
                        return (
-                          <button
-                             key={fx.id}
-                             onClick={() => setSequencer(prev => ({
-                                ...prev,
-                                masterFX: { ...prev.masterFX, [fx.id]: { ...prev.masterFX[fx.id], active: !isActive } }
-                             }))}
-                             title={`MASTER_${fx.label}`}
-                             className={`mx-1 p-1 rounded-lg transition-all flex flex-col items-center gap-0.5 ${isActive ? 'bg-primary text-on-primary shadow-[0_0_8px_#38bdf8]' : 'bg-white/5 text-outline opacity-40 hover:opacity-100'}`}
-                          >
-                             <fx.icon className="w-2.5 h-2.5" />
-                             <span className="text-[5px] font-black">{fx.label}</span>
-                          </button>
+                          <IconButton 
+                             key={fx.id} 
+                             icon={fx.icon} 
+                             label={fx.label}
+                             active={isActive} 
+                             onClick={() => setSequencer(prev => ({ 
+                                ...prev, 
+                                masterFX: { 
+                                   ...prev.masterFX, 
+                                   [fx.id]: { ...prev.masterFX[fx.id], active: !isActive } 
+                                } 
+                             }))} 
+                             className="w-full h-8"
+                          />
                        );
                     })}
                  </div>
               </div>
 
-              <div className="z-10 flex flex-col gap-2">
-                 <div className="bg-black/60 p-2 rounded-xl border border-error/30 flex flex-col gap-1 items-center">
-                    <div className="flex justify-between w-full px-1">
-                       <span className="font-mono text-[7px] text-error font-black tracking-widest uppercase">LIMITER</span>
-                       <div className={`w-1.5 h-1.5 rounded-full ${masterLimiterActive ? 'bg-error animate-ping' : 'bg-white/10'}`} />
-                    </div>
-                    <div className={`w-full h-1 rounded-full transition-all duration-75 ${masterLimiterActive ? 'bg-error shadow-[0_0_10px_#f87171]' : 'bg-white/5'}`} />
-                 </div>
-
-                 <div className="bg-primary/90 text-white rounded-xl p-2 text-center shadow-[0_10px_20px_rgba(56,189,248,0.3)]">
-                    <div className="font-mono text-[10px] font-black tracking-tighter leading-none">{Math.round(sequencer.masterVolume * 100)}%</div>
-                    <div className="font-headline text-[6px] font-black uppercase tracking-widest mt-1 opacity-70">GAIN_DB</div>
-                 </div>
+              {/* RECORDING CONTROLS */}
+              <div className="flex flex-col items-center gap-2 z-10">
+                <div className="font-headline text-[9px] text-outline tracking-[0.3em] uppercase">CAPTURE_RIG</div>
+                <IconButton 
+                  icon={isRecording ? Square : Video} 
+                  label={isRecording ? "Stop Recording" : "Start Recording"}
+                  active={isRecording} 
+                  onClick={isRecording ? stopCapture : startCapture} 
+                  className={`w-12 h-12 rounded-full border-2 ${isRecording ? 'border-error/50 bg-error/20 text-error animate-pulse' : 'border-white/10 bg-black/40 text-white/60'}`}
+                />
               </div>
-
-              {/* Aesthetic background glow */}
-              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-primary/10 to-transparent pointer-events-none" />
-          </div>
+           </div>
         </div>
-      </div>
 
-      {/* Side Monitor Area */}
-      <div 
-        className="xl:flex-1 flex flex-col gap-6 xl:overflow-y-auto min-h-0 z-20 custom-scrollbar mt-4 xl:mt-0"
-      >
-        {/* FFT Monitor & Crossovers */}
-        <div className="min-h-[280px] bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 flex flex-col shadow-2xl relative overflow-hidden">
-          <div className="p-6 pb-2 flex items-center justify-between z-10">
-            <h4 className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">Spectral_Analyser // Crossover</h4>
-            <div className="flex items-center gap-4">
-               {/* Master Limiter Brickwall LED */}
-               <div className="flex items-center gap-2">
-                 <span className="font-headline text-[7px] text-error tracking-[0.2em] font-black uppercase">BRICKWALL</span>
-                 <div className={`w-2.5 h-2.5 rounded-full transition-all duration-75 ${
-                   masterLimiterActive ? 'bg-error shadow-[0_0_15px_#f87171] border border-error max-scale-125' : 'bg-black/50 border border-white/10'
-                 }`} />
-               </div>
-               
-               {/* Master Output VU Meter */}
-               <div className="flex flex-col items-end gap-1">
-                 <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-24 h-2 opacity-100" />
-                 <span className="font-mono text-[7px] text-outline/50 uppercase">MASTER_PEAK</span>
-               </div>
-            </div>
-          </div>
-
-          <div className="px-6 flex-1 flex flex-col relative z-10">
-            <canvas 
-              ref={mixerCanvasRef} 
-              className="flex-1 w-full bg-black/40 rounded-xl border border-white/5 mb-4"
-              role="img"
-              aria-label="Real-time spectral analyzer monitor"
+        <div className="mt-8 flex items-center gap-4 border-t border-white/5 pt-4">
+          <IconButton icon={Play} label="Play" onClick={() => audioEngine.start(sequencer.bpm)} active={audioEngine.isPlaying()} />
+          <IconButton icon={Square} label="Stop" onClick={() => audioEngine.stop()} active={!audioEngine.isPlaying()} />
+          
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-outline uppercase">BPM:</span>
+            <input 
+              type="number" 
+              value={sequencer.bpm}
+              onChange={e => {
+                const val = Math.max(1, Math.min(300, parseInt(e.target.value) || 120));
+                setSequencer(prev => ({ ...prev, bpm: val }));
+                audioEngine.setBPM(val);
+              }}
+              className="bg-surface-container-highest text-primary font-mono text-sm w-16 px-2 py-1 rounded-lg border border-white/10 outline-none focus:border-primary/50"
             />
-            {/* CROSSOVER GATES CONTROLS */}
-            <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-4 mb-4">
-               {[
-                 { id: 'low200', label: 'LOW_200Hz', color: 'text-error', border: 'border-error/50', bg: 'bg-error', active: crossoverGates.low200 },
-                 { id: 'mid1000', label: 'MID_1kHz', color: 'text-tertiary', border: 'border-tertiary/50', bg: 'bg-tertiary', active: crossoverGates.mid1000 },
-                 { id: 'high3000', label: 'HI_3kHz', color: 'text-primary', border: 'border-primary/50', bg: 'bg-primary', active: crossoverGates.high3000 }
-               ].map(gate => (
-                 <button 
-                   key={gate.id}
-                   onClick={() => toggleCrossoverGate(gate.id as keyof CrossoverState)}
-                   className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
-                     gate.active ? `bg-surface-container-highest ${gate.border}` : 'border-white/5 opacity-50 hover:bg-surface-container-highest hover:opacity-100'
-                   }`}
-                 >
-                   <div className="font-headline text-[7px] tracking-[0.2em] text-outline font-black mb-2 uppercase">{gate.label}</div>
-                   <div className={`w-8 h-2 rounded-full overflow-hidden bg-black/50 border border-white/10 relative`}>
-                     <div className={`absolute top-0 bottom-0 left-0 transition-all ${gate.bg} ${gate.active ? 'w-full' : 'w-0'}`} />
-                   </div>
-                   <span className={`mt-2 font-mono text-[8px] font-bold ${gate.active ? gate.color : 'text-outline/40'}`}>
-                     {gate.active ? 'ENGAGED' : 'BYPASS'}
-                   </span>
-                 </button>
-               ))}
-            </div>
           </div>
-        </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-outline uppercase">BEAT:</span>
+            <span className="font-mono text-xs text-primary">{sequencer.currentBeat + 1}</span>
+          </div>
 
-        {/* Live Logs */}
-        <div className="flex-1 bg-surface-container-high/40 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 flex flex-col shadow-2xl overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-             <h4 className="font-headline text-[10px] text-outline tracking-[0.3em] font-black uppercase">Transcription_Bus</h4>
-             <button 
-                onClick={onTranscribe}
-                className={`px-4 py-1.5 rounded-full font-headline text-[9px] font-black uppercase transition-all flex items-center gap-2 ${
-                  isTranscribing ? 'bg-error text-on-error animate-pulse border border-error/50' : 'bg-surface-container-highest text-outline border border-white/10 hover:text-white'
-                }`}
-              >
-                <div className={`w-1.5 h-1.5 rounded-full ${isTranscribing ? 'bg-white' : 'bg-outline'}`} />
-                {isTranscribing ? 'Listening...' : 'Transcribe'}
-              </button>
-          </div>
-          <div className="flex-1 bg-black/40 rounded-xl border border-white/5 p-4 font-mono text-[11px] leading-relaxed text-emerald-400 overflow-y-auto custom-scrollbar">
-            {transcripts.map((t, i) => (
-              <motion.div 
-                key={i} 
-                initial={{ opacity: 0, x: -5 }} 
-                animate={{ opacity: 1, x: 0 }}
-                className="mb-2 last:mb-0 pb-2 border-b border-white/5 last:border-0"
-              >
-                <span className="text-emerald-900 mr-2">[{new Date().toLocaleTimeString([], { hour12: false })}]</span>
-                {t}
-              </motion.div>
-            ))}
-          </div>
+          <IconButton 
+            icon={Mic} 
+            label="Transcribe" 
+            onClick={onTranscribe} 
+            active={isTranscribing} 
+            className={`ml-auto ${isTranscribing ? 'text-error bg-error/20' : ''}`}
+          />
+          <input 
+            type="text" 
+            placeholder="Say something..." 
+            value={transcripts[0] || ''}
+            readOnly
+            className="flex-1 bg-surface-container-highest text-white font-mono text-sm px-3 py-2 rounded-lg border border-white/10 outline-none"
+          />
         </div>
       </div>
-      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
 
-const FilterMatrixView = ({ 
-  state, 
-  activeSteps,
-  onUpdateTrack, 
-  onBpmChange, 
-  onTogglePlay,
-  onUpdateSequencer,
-  channels
-}: { 
-  state: SequencerState, 
-  activeSteps: {[key: string]: number},
-  onUpdateTrack: (trackId: string, updates: Partial<PulseTrack>) => void, 
-  onBpmChange: (bpm: number) => void, 
-  onTogglePlay: () => void,
-  onUpdateSequencer: (updates: Partial<SequencerState>) => void,
-  channels: ChannelState[]
+const FilterMatrixView = ({
+  crossoverGates,
+  toggleCrossoverGate,
+  matrixMappings,
+  updateMatrixMapping,
+  channels,
+  sequencer,
+  // MIDI Learn Props
+  learningId,
+  setLearningId,
+  handleLearnMapping,
+}: {
+  crossoverGates: CrossoverState;
+  toggleCrossoverGate: (gate: keyof CrossoverState) => void;
+  matrixMappings: MatrixMapping[];
+  updateMatrixMapping: (id: string, update: Partial<MatrixMapping>) => void;
+  channels: ChannelState[];
+  sequencer: SequencerState;
+  // MIDI Learn Props
+  learningId: string | null;
+  setLearningId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleLearnMapping: (mappingId: string) => Promise<void>;
 }) => {
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-12 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.02)_0%,transparent_70%)]">
-      <div className="w-full max-w-6xl mx-auto flex flex-col gap-8">
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem)]">
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
         
-        {/* Header & Transport */}
-        <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6 border-b border-primary/20 pb-6">
+        {/* Header */}
+        <div className="mb-6 flex justify-between items-end border-b border-primary/20 pb-4">
            <div>
-             <h2 className="font-headline text-3xl md:text-5xl text-primary font-black tracking-tighter uppercase italic glow-text leading-none">FILTER_MATRIX</h2>
-             <span className="font-headline text-[10px] text-outline tracking-[0.4em] uppercase font-bold">Multi-Resolution Quantization Matrix</span>
+             <h2 className="font-headline text-3xl md:text-4xl text-primary font-black tracking-tighter uppercase leading-none italic glow-text">CROSSOVER_MATRIX</h2>
+             <p className="font-headline text-[10px] text-outline tracking-widest uppercase mt-2">Frequency Band Routing / Gain Control</p>
            </div>
-           
-           <div className="flex bg-black/50 border border-white/10 rounded-xl p-2 gap-2 shadow-2xl backdrop-blur-md">
+           <div className="flex gap-2">
+              <span className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-xl font-headline text-[9px] tracking-[0.2em] font-black uppercase shadow-[0_0_15px_rgba(56,189,248,0.2)]">ACTIVE_FILTERING</span>
+           </div>
+        </div>
+
+        {/* Crossover Gates */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[ 
+            { id: 'low' as const, label: 'LOW (0-200Hz)', icon: Disc, color: 'primary' },
+            { id: 'mid' as const, label: 'MID (200-3000Hz)', icon: Waves, color: 'tertiary' },
+            { id: 'high' as const, label: 'HIGH (3000Hz+)', icon: Wind, color: 'primary' },
+          ].map(gate => (
+            <div key={gate.id} className="bg-surface-container-high/60 border border-white/5 p-4 rounded-2xl flex items-center justify-between backdrop-blur-md group hover:border-primary/40 transition-all">
+              <div className="flex items-center gap-4">
+                 <div className="w-10 h-10 rounded-full border-2 border-outline/20 relative flex items-center justify-center">
+                    <gate.icon className={`w-5 h-5 ${crossoverGates[gate.id] ? 'text-primary animate-pulse' : 'text-outline'}`} />
+                 </div>
+                 <div>
+                    <div className="font-headline text-sm text-white font-black uppercase leading-none tracking-tight">{gate.label}</div>
+                    <div className="font-mono text-[9px] text-outline mt-1">{crossoverGates[gate.id] ? 'ACTIVE' : 'INACTIVE'}</div>
+                 </div>
+              </div>
               <button 
-                onClick={onTogglePlay} 
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-headline font-black tracking-widest text-[10px] uppercase transition-all ${
-                  state.isPlaying ? 'bg-error text-on-error shadow-[0_0_15px_#f87171] animate-pulse' : 'bg-primary text-on-primary shadow-[0_0_15px_rgba(56,189,248,0.4)]'
-                }`}
+                onClick={() => toggleCrossoverGate(gate.id)}
+                className={`px-4 py-2 rounded-lg font-headline text-[10px] uppercase font-black transition-all ${crossoverGates[gate.id] ? 'bg-primary text-on-primary-container shadow-[0_0_15px_rgba(56,189,248,0.3)]' : 'bg-black/40 text-outline hover:text-white border border-white/10'}`}
               >
-                {state.isPlaying ? 'HALT_MATRIX' : 'SYNC_CLOCK'}
+                {crossoverGates[gate.id] ? 'DEACTIVATE' : 'ACTIVATE'}
               </button>
-              
-              <div className="flex flex-col justify-center px-4 border-l border-white/10 w-32">
-                 <div className="flex justify-between items-center mb-1">
-                   <span className="font-headline text-[8px] text-outline tracking-widest uppercase">SYS_CLOCK</span>
-                   <span className="font-mono text-[10px] text-primary">{state.bpm} BPM</span>
-                 </div>
-                 <input 
-                   type="range" min="60" max="240" value={state.bpm} onChange={e => onBpmChange(parseInt(e.target.value))}
-                   className="w-full h-1 bg-surface-container-highest appearance-none rounded-full accent-primary cursor-pointer"
-                 />
-              </div>
-
-              {/* Tempo Drift Control */}
-              <div className="flex flex-col justify-center px-4 border-l border-white/10 w-48">
-                 <div className="flex justify-between items-center mb-1">
-                   <span className="font-headline text-[8px] text-outline tracking-widest uppercase">TEMPO_DRIFT</span>
-                   <button 
-                     onClick={() => onUpdateSequencer({ tempoDriftEnabled: !state.tempoDriftEnabled })}
-                     className={`w-6 h-3 rounded-full relative transition-all ${state.tempoDriftEnabled ? 'bg-primary' : 'bg-white/10'}`}
-                   >
-                     <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${state.tempoDriftEnabled ? 'right-0.5' : 'left-0.5'}`} />
-                   </button>
-                 </div>
-                 <select 
-                   value={state.masterTempoSourceId || ''}
-                   onChange={e => onUpdateSequencer({ masterTempoSourceId: e.target.value })}
-                   className="bg-transparent border-none text-[8px] text-outline uppercase font-mono outline-none"
-                 >
-                   <option value="">FOLLOW_INTERNAL</option>
-                   {channels.map(ch => (
-                     <option key={ch.id} value={ch.id}>FOLLOW: {ch.name}</option>
-                   ))}
-                 </select>
-              </div>
-           </div>
-        </div>
-
-        {/* Tracks List */}
-        <div className="flex flex-col gap-4">
-           {state.tracks.map((track) => (
-             <div key={track.id} className="bg-surface-container-highest/30 p-4 border border-white/5 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-sm flex flex-col gap-4">
-                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC41Ii8+PC9zdmc+')] opacity-20 pointer-events-none" />
-                
-                {/* Track Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 z-10">
-                   <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rotate-45 border ${track.targetFilter !== 'NONE' ? 'bg-tertiary border-tertiary shadow-[0_0_8px_#56e5a9]' : 'border-white/20'}`} />
-                      <h3 className="font-headline font-black text-white px-2 tracking-[0.2em] text-sm uppercase italic">{track.name}</h3>
-                   </div>
-                   
-                   <div className="flex items-center gap-4">
-                      <div className="flex flex-col gap-1">
-                         <span className="font-headline text-[7px] text-outline uppercase tracking-widest">Routing_Target</span>
-                         <select 
-                           value={track.targetFilter || 'NONE'}
-                           onChange={(e) => onUpdateTrack(track.id, { targetFilter: e.target.value as any })}
-                           className="bg-black/50 border border-white/10 text-white font-mono text-[9px] rounded p-1.5 outline-none focus:border-tertiary/50 uppercase"
-                         >
-                            <option value="NONE">SELECT_TARGET</option>
-                            <option value="LOW_BAND">MASTER_BAND (LOW)</option>
-                            <option value="MID_BAND">MASTER_BAND (MID)</option>
-                            <option value="HIGH_BAND">MASTER_BAND (HIGH)</option>
-                         </select>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                         <span className="font-headline text-[7px] text-outline uppercase tracking-widest text-right">Resolution</span>
-                         <select 
-                           value={track.division}
-                           onChange={(e) => onUpdateTrack(track.id, { division: parseInt(e.target.value) })}
-                           className="bg-black/50 border border-white/10 text-white font-mono text-[9px] rounded p-1.5 outline-none focus:border-primary/50 text-right"
-                         >
-                            <option value="4">1/4</option>
-                            <option value="8">1/8</option>
-                            <option value="16">1/16</option>
-                            <option value="32">1/32</option>
-                            <option value="64">1/64</option>
-                         </select>
-                      </div>
-                   </div>
-                </div>
-
-                {/* Track Steps Grid */}
-                <div className={`grid gap-2 relative z-10`} style={{ gridTemplateColumns: `repeat(auto-fit, minmax(32px, 1fr))` }}>
-                  {track.steps.map((active, i) => {
-                    const isPlayhead = activeSteps[track.id] === i;
-                    const isDownbeat = i % (track.length >= 16 ? 4 : 2) === 0;
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          const s = [...track.steps];
-                          s[i] = !s[i];
-                          onUpdateTrack(track.id, { steps: s });
-                        }}
-                        className={`group relative aspect-[1/1] sm:aspect-[2/3] flex flex-col items-center justify-end pb-2 rounded-md transition-all border outline-none ${
-                          active ? 'border-primary/50 shadow-[0px_0px_10px_rgba(56,189,248,0.3)] bg-gradient-to-t from-primary/30 to-black/40' : 'border-white/5 bg-black/60 hover:border-white/20'
-                        } ${isPlayhead ? 'border-white bg-white/10' : ''}`}
-                      >
-                        {/* Step Number Top */}
-                        <span className={`absolute top-1 font-headline text-[6px] tracking-widest uppercase ${active ? 'text-primary' : 'text-outline/30'} ${isDownbeat ? 'font-black' : ''}`}>
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-
-                        {/* Center Reticle (Active indication) */}
-                        <div className={`w-2 h-2 rounded-sm rotate-45 border transition-all my-auto ${
-                          active ? 'bg-primary border-primary shadow-[0_0_10px_#38bdf8] scale-110' : 'border-white/10 bg-transparent'
-                        } ${isPlayhead ? 'bg-white border-white scale-150' : ''}`} />
-
-                        {/* Bottom Indicator */}
-                        <div className={`w-1/2 h-[2px] mt-1 transition-all ${
-                          active ? 'bg-primary' : 'bg-white/5'
-                        } ${isDownbeat ? 'w-full' : ''}`} />
-                      </button>
-                    );
-                  })}
-                </div>
-             </div>
-           ))}
-        </div>
-
-        {/* Info Footer */}
-        <div className="flex justify-between items-center font-headline text-[8px] text-outline/50 tracking-[0.3em] border-t border-white/5 pt-4">
-           <span>MULTI_TIER_ROUTING // ENABLED</span>
-           <span>MASTER_SYNC // QUARTZ</span>
-        </div>
-      </div>
-      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
-    </div>
-  );
-};
-
-const MatrixCanvas = ({ 
-  sources, 
-  destinations, 
-  connections, 
-  onToggle 
-}: { 
-  sources: RoutingSource[], 
-  destinations: RoutingDestination[], 
-  connections: RoutingConnection[],
-  onToggle: (sId: string, dId: string) => void
-}) => {
-  return (
-    <div className="flex-1 w-full bg-black/40 rounded-3xl border border-white/5 relative overflow-hidden flex flex-col p-4 md:p-8">
-      {/* Grid Headers - Top (Destinations) */}
-      <div className="flex mb-4">
-        <div className="w-24 md:w-32 flex-shrink-0" /> {/* Corner Spacer */}
-        <div className="flex-1 flex justify-around">
-          {destinations.map(dst => (
-            <div key={dst.id} className="flex-1 flex flex-col items-center group">
-              <span className="font-headline text-[7px] md:text-[9px] text-outline/50 tracking-[0.2em] uppercase origin-bottom -rotate-45 mb-2 group-hover:text-primary transition-colors">{dst.name}</span>
-              <div className="w-px h-12 bg-white/5 group-hover:bg-primary/20" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Grid Area */}
-      <div className="flex-1 flex">
-        {/* Row Headers (Sources) */}
-        <div className="w-24 md:w-32 flex flex-col justify-around py-2">
-          {sources.map(src => (
-            <div key={src.id} className="flex items-center gap-2 group h-12">
-               <div className={`w-1 h-3 rounded-full ${src.active ? 'bg-primary' : 'bg-outline/20'}`} />
-               <span className="font-headline text-[7px] md:text-[9px] text-outline font-black tracking-widest uppercase transition-colors group-hover:text-tertiary truncate">{src.name}</span>
             </div>
           ))}
         </div>
 
-        {/* The Actual Matrix */}
-        <div className="flex-1 flex flex-col justify-around relative bg-gradient-to-br from-white/5 to-transparent rounded-2xl p-2 md:p-4">
-           {/* Animated Background Flow */}
-           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
-              <motion.div 
-                animate={{ backgroundPosition: ['0% 0%', '100% 100%'] }}
-                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-                className="w-full h-full bg-[radial-gradient(circle,rgba(56,189,248,0.2)_1px,transparent_1px)] [background-size:24px_24px]"
-              />
-           </div>
-
-           {sources.map(src => (
-             <div key={src.id} className="flex-1 flex items-center justify-around group h-12 border-b border-white/[0.02]">
-                {destinations.map(dst => {
-                  const isConnected = connections.some(c => c.sourceId === src.id && c.destinationId === dst.id);
+        {/* Routing Grid */}
+        <div className="mt-8">
+          <div className="flex items-center gap-3 mb-4">
+            <RouteIcon className="w-5 h-5 text-primary" />
+            <h3 className="font-headline text-xs text-white uppercase tracking-[0.3em] font-black">Audio_Route_Matrix</h3>
+          </div>
+          <div className="bg-surface-container-high/60 border border-white/5 rounded-2xl p-4 md:p-6 backdrop-blur-md">
+            <div className="grid grid-cols-[100px_repeat(4,1fr)] md:grid-cols-[150px_repeat(4,1fr)] gap-2 mb-4">
+              <div className="text-[8px] md:text-[9px] text-outline font-headline uppercase tracking-wider font-bold">Source</div>
+              {['Low', 'Mid', 'High', 'Master'].map(dest => (
+                <div key={dest} className="text-[8px] md:text-[9px] text-outline font-headline uppercase tracking-wider font-bold text-center">{dest}</div>
+              ))}
+            </div>
+            {channels.map(channel => (
+              <div key={channel.id} className="grid grid-cols-[100px_repeat(4,1fr)] md:grid-cols-[150px_repeat(4,1fr)] gap-2 mb-2 items-center">
+                <div className="font-headline text-[9px] text-white uppercase truncate">{channel.name}</div>
+                {['low', 'mid', 'high', 'master'].map(destKey => {
+                  const dest = destKey as RoutingDestination;
+                  const isConnected = channel.routing.includes(dest);
                   return (
-                    <button
-                      key={`${src.id}-${dst.id}`}
-                      onClick={() => onToggle(src.id, dst.id)}
-                      className={`w-4 h-4 md:w-6 md:h-6 rounded flex items-center justify-center transition-all relative group/node ${
-                        isConnected 
-                          ? 'bg-primary shadow-[0_0_15px_#38bdf8] scale-110' 
-                          : 'bg-white/5 hover:bg-white/10'
-                      }`}
-                      aria-label={`Route ${src.name} to ${dst.name}`}
-                      aria-pressed={isConnected}
+                    <button 
+                      key={dest} 
+                      onClick={() => {
+                        const newRouting = isConnected
+                          ? channel.routing.filter(d => d !== dest)
+                          : [...channel.routing, dest];
+                        updateChannel(channel.id, { routing: newRouting });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[8px] md:text-[9px] font-headline uppercase font-black transition-all flex items-center justify-center gap-1 ${isConnected ? 'bg-primary text-on-primary-container' : 'bg-surface-container-highest text-outline hover:bg-surface-container-highest/50'}`}
                     >
-                      {/* Connection Lines (Simulated with nodes) */}
-                      {isConnected && (
-                        <>
-                          <motion.div 
-                            layoutId={`signal-${src.id}-${dst.id}`}
-                            className="absolute inset-0 bg-primary blur-sm rounded animate-pulse" 
-                          />
-                          <div className="w-1.5 h-1.5 bg-white rounded-full z-10" />
-                        </>
-                      )}
-                      
+                      {isConnected && <div className="w-1 h-1 bg-primary rounded-full shadow-[0_0_8px_#38bdf8]" />}
+                      {dest.slice(0, 1).toUpperCase() + dest.slice(1)}
                       {!isConnected && <div className="w-1 h-1 bg-white/10 rounded-full group-hover/node:bg-white/30 transition-colors" />}
                     </button>
                   );
                 })}
-             </div>
-           ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-8 flex items-center gap-4 border-t border-white/5 pt-4">
-         <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-primary" />
-            <span className="font-headline text-[8px] text-outline tracking-widest uppercase">CONNECTION_ESTABLISHED</span>
-         </div>
-         <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-white/5" />
-            <span className="font-headline text-[8px] text-outline/40 tracking-widest uppercase">NODE_AVAILABLE</span>
-         </div>
-         <div className="ml-auto flex items-center gap-2">
-            <Zap className="w-3 h-3 text-tertiary" />
-            <span className="font-headline text-[8px] text-tertiary tracking-[0.3em] font-black uppercase italic">SIGNAL_OPTIMIZED</span>
-         </div>
       </div>
     </div>
   );
 };
 
 const MatrixView = ({
-  mappings
+  mappings,
+  learningId,
+  setLearningId,
+  handleLearnMapping,
 }: {
-  mappings: MatrixMapping[]
+  mappings: MatrixMapping[];
+  learningId: string | null;
+  setLearningId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleLearnMapping: (mappingId: string) => Promise<void>;
 }) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedId(prev => (prev === id ? null : id));
+  }, []);
+
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem]">
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem)]">
       <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
         
         {/* Header */}
@@ -1423,9 +1041,24 @@ const MatrixView = ({
                       </div>
                       <div className="flex flex-col items-end">
                          <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
-                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner">
-                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
-                         </div>
+                         {learningId === m.id ? (
+                            <div className="bg-black border border-primary/40 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner animate-pulse">
+                               AWAITING_MIDI_SIGNAL
+                            </div>
+                         ) : (
+                            <div className="flex items-center gap-2">
+                               <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-primary font-bold shadow-inner">
+                                  {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                               </div>
+                               <button 
+                                 onClick={() => handleLearnMapping(m.id)}
+                                 className="px-3 py-1.5 bg-primary/20 text-primary rounded-lg font-headline text-[9px] uppercase tracking-widest hover:bg-primary/40 transition-all"
+                                 title="Learn MIDI CC"
+                               >
+                                 [LEARN]
+                               </button>
+                            </div>
+                         )}
                       </div>
                    </div>
                  ))}
@@ -1452,394 +1085,150 @@ const MatrixView = ({
                       </div>
                       <div className="flex flex-col items-end">
                          <div className="font-headline text-[8px] tracking-[0.2em] text-outline uppercase mb-1">Midi_CC</div>
-                         <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner">
-                            {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
-                         </div>
+                         {learningId === m.id ? (
+                            <div className="bg-black border border-tertiary/40 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner animate-pulse">
+                               AWAITING_MIDI_SIGNAL
+                            </div>
+                         ) : (
+                            <div className="flex items-center gap-2">
+                               <div className="bg-black border border-white/10 px-4 py-2 rounded-lg font-mono text-xs text-tertiary font-bold shadow-inner">
+                                  {m.midiCC !== null ? String(m.midiCC).padStart(3, '0') : '---'}
+                               </div>
+                               <button 
+                                 onClick={() => handleLearnMapping(m.id)}
+                                 className="px-3 py-1.5 bg-tertiary/20 text-tertiary rounded-lg font-headline text-[9px] uppercase tracking-widest hover:bg-tertiary/40 transition-all"
+                                 title="Learn MIDI CC"
+                               >
+                                 [LEARN]
+                               </button>
+                            </div>
+                         )}
                       </div>
                    </div>
                  ))}
               </div>
            </div>
-
-        </div>
-
-        {/* Global Action */}
-        <div className="mt-8 flex justify-center">
-           <button onClick={() => alert("Hardware scan initiated. No new connected MIDI interfaces detected.")} className="bg-transparent border-2 border-white/10 hover:border-white/40 text-outline hover:text-white px-8 py-4 rounded-2xl font-headline text-[10px] uppercase tracking-[0.3em] font-black transition-all active:scale-95">
-             RESCAN_MIDI_INTERFACES
-           </button>
         </div>
       </div>
-      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
 
-const RegistryView = ({ presets, onLoadPreset }: { presets: RegistryPreset[], onLoadPreset: (id: string) => void }) => {
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(presets[0]?.id || null);
-
-  const activePreset = presets.find(p => p.id === selectedPreset);
-
+const RegistryView = ({
+  presets,
+  onLoadPreset,
+}: {
+  presets: RegistryPreset[];
+  onLoadPreset: (patchData: string) => void;
+}) => {
   return (
-    <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 bg-surface">
-      <div className="flex-1 p-4 md:p-8 pb-32 md:pb-8 overflow-y-auto custom-scrollbar">
-        <div className="mb-6 md:mb-10 flex flex-col sm:flex-row gap-4 items-start sm:items-center sticky top-0 bg-surface/80 backdrop-blur-xl z-20 pb-4">
-           <div className="flex-1 w-full bg-surface-container-low rounded-xl border border-white/5 flex items-center px-4 py-3 focus-within:ring-2 focus-within:ring-primary/50 transition-all group max-w-xl">
-             <Settings className="w-5 h-5 text-outline mr-3 group-hover:text-primary transition-colors" aria-hidden="true" />
-             <input 
-              type="text" 
-              placeholder="QUERY_REGISTRY_DATABASE..." 
-              aria-label="Search available synth patches and presets"
-              className="bg-transparent border-none outline-none text-white font-headline text-sm w-full placeholder:text-outline/30" 
-             />
+    <div className="flex-1 flex flex-col p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 overflow-y-auto custom-scrollbar bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem)]">
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+        {/* Header */}
+        <div className="mb-6 flex justify-between items-end border-b border-primary/20 pb-4">
+           <div>
+             <h2 className="font-headline text-3xl md:text-4xl text-primary font-black tracking-tighter uppercase leading-none italic glow-text">REGISTRY_HUB_V2</h2>
+             <p className="font-headline text-[10px] text-outline tracking-widest uppercase mt-2">Preset Manager & Global Patch Library</p>
            </div>
-           <div className="flex flex-wrap gap-2">
-             {['ALL', 'AGGR', 'SYNC', 'VOID', 'LO', 'HI'].map(tag => (
-               <button key={tag} className={`px-4 py-1.5 rounded-full font-headline text-[9px] md:text-[10px] tracking-widest uppercase border transition-all active:scale-95 ${
-                 tag === 'ALL' ? 'bg-primary/20 border-primary text-primary shadow-[0_0_10px_rgba(56,189,248,0.2)]' : 'bg-surface-container-high border-white/5 text-outline hover:text-white hover:border-primary/20'
-               }`}>
-                 {tag}
-               </button>
-             ))}
+           <div className="flex gap-2">
+              <span className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-xl font-headline text-[9px] tracking-[0.2em] font-black uppercase shadow-[0_0_15px_rgba(56,189,248,0.2)]">SYNCHRONIZED_CLOUD</span>
            </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-6">
-          {presets.map(p => {
-            const isActive = selectedPreset === p.id;
-            return (
-              <button 
-                key={p.id} 
-                onClick={() => setSelectedPreset(p.id)}
-                aria-label={`Preset: ${p.name}. ${isActive ? 'Current selection' : 'Click to select'}`}
-                className={`p-5 md:p-6 rounded-3xl transition-all duration-300 relative overflow-hidden group text-left focus:outline-none focus:ring-2 focus:ring-primary/50 ${
-                  isActive ? 'bg-surface-container-high border-l-4 border-primary shadow-2xl scale-[1.02]' : 'bg-surface-container-low border border-white/5 hover:bg-surface-container-high hover:scale-[1.01]'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-4 md:mb-6">
-                   <div>
-                     <h3 className={`font-headline text-base md:text-lg font-black mb-1 leading-none ${isActive ? 'text-primary glow-text' : 'text-white group-hover:text-primary transition-colors'}`}>{p.name}</h3>
-                     <p className="text-[9px] text-outline font-headline uppercase tracking-tighter">ID: {p.id} // TS: {p.lastModified}</p>
-                   </div>
-                   {isActive && <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_10px_#38bdf8]" aria-hidden="true" />}
+        {/* Presets Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {presets.map(preset => (
+            <motion.div 
+              key={preset.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="bg-surface-container-high/60 backdrop-blur-md rounded-2xl border border-white/5 p-5 flex flex-col gap-4 shadow-lg hover:border-primary/40 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <LibraryIcon className="w-5 h-5 text-primary" />
+                <div>
+                  <h3 className="font-headline text-lg text-white font-black uppercase leading-none tracking-tight glow-text-small">{preset.name}</h3>
+                  <p className="font-mono text-[9px] text-outline mt-1">LAST_MOD: {preset.lastModified}</p>
                 </div>
-                
-                <div className="flex flex-wrap gap-2 font-headline text-[8px] text-outline tracking-[0.2em] uppercase mt-4">
-                  {p.tags.map(t => <span key={t} className="bg-white/5 px-2 py-0.5 rounded border border-white/10">{t}</span>)}
+              </div>
+              <p className="font-mono text-xs text-white/80 leading-relaxed flex-1">{preset.description}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  {preset.tags.map(tag => (
+                    <span key={tag} className="bg-primary/10 text-primary text-[8px] font-mono px-2 py-1 rounded-full uppercase">{tag}</span>
+                  ))}
                 </div>
-              </button>
-            );
-          })}
+                <button 
+                  onClick={() => onLoadPreset(preset.patchData)}
+                  className="px-4 py-2 bg-primary text-on-primary-container rounded-lg font-headline text-[10px] uppercase font-black shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:opacity-90 transition-opacity"
+                >
+                  LOAD_PRESET
+                </button>
+              </div>
+            </motion.div>
+          ))}
         </div>
       </div>
-
-      <aside className="w-full xl:w-[400px] bg-surface-container-low border-l border-white/10 p-6 md:p-8 flex flex-col shadow-2xl xl:static fixed inset-y-0 right-0 z-40 translate-x-full xl:translate-x-0 transition-transform">
-         <div className="mb-2">
-            <span className="font-headline text-[10px] text-primary tracking-[0.3em] font-black uppercase">REGISTRY_INSPECTOR</span>
-         </div>
-         {activePreset ? (
-           <>
-             <h2 className="font-headline text-2xl md:text-3xl text-white font-black tracking-tighter glow-text mb-4 uppercase">{activePreset.name}</h2>
-             <p className="font-body text-sm text-outline mb-8 leading-relaxed font-light">{activePreset.description}</p>
-             
-             <div className="flex bg-black/40 border border-white/5 p-4 rounded-xl flex-col gap-2 mb-10 overflow-hidden">
-                <span className="font-headline text-[8px] text-outline/50 uppercase tracking-[0.3em]">JSON_PATCH_DATA</span>
-                <pre className="font-mono text-[10px] text-tertiary overflow-hidden text-ellipsis">
-                  {JSON.stringify(JSON.parse(activePreset.patchData), null, 2)}
-                </pre>
-             </div>
-
-             <button 
-               onClick={() => onLoadPreset(activePreset.id)}
-               className="mt-auto bg-primary hover:bg-white text-on-primary-container py-4 md:py-5 rounded-2xl font-headline font-black text-xs tracking-widest shadow-2xl active:scale-[0.98] transition-all uppercase flex items-center justify-center gap-3"
-             >
-                <Plus className="w-4 h-4" />
-                ADD_TO_SESSION
-             </button>
-           </>
-         ) : (
-           <div className="flex-1 flex items-center justify-center font-headline text-xs text-outline/50 uppercase tracking-[0.3em]">
-              NO_PRESET_SELECTED
-           </div>
-         )}
-      </aside>
-      <div className="h-40 shrink-0 md:hidden" aria-hidden="true" />
     </div>
   );
 };
 
-const ProjectorView = () => {
-  const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
-    const tryConnect = () => {
-      try {
-        // @ts-ignore
-        const mainStream = window.opener?.window?.extreamixMainStream;
-        if (mainStream && videoRef.current) {
-          if (videoRef.current.srcObject !== mainStream) {
-            videoRef.current.srcObject = mainStream;
-            videoRef.current.play().catch(console.error);
-          }
-        }
-      } catch (e) {
-        console.warn("Unable to connect to mainline hub stream.", e);
-      }
-      setTimeout(tryConnect, 1000);
-    };
-    
-    tryConnect();
-  }, []);
-
-  return (
-    <div className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden">
-      <video ref={videoRef} className="w-full h-full object-contain" autoPlay muted playsInline />
-      <div className="absolute top-4 left-4 font-headline text-[8px] text-primary/30 uppercase tracking-[0.4em]">EXTREAMIX_REMOTE_NODE</div>
-    </div>
-  );
-};
-
-// --- Main App Implementation ---
-
-export default function App() {
-  const isProjector = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('projector') === 'true';
+const App = () => {
   const [isLaunched, setIsLaunched] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('extreamix_isLaunched') === 'true';
     }
     return false;
   });
-  
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<View>('mixer');
-  
- // RevenueCat State via centralized hook
-  const subscription = useSubscription();
-  const { isPro, activeEntitlements, packages, isPurchasing, purchase, purchaseAddon, openManagement, hasEntitlement } = subscription;
-
-  // Admin detection: only show admin section if the current RC user ID matches the admin ID
-  const adminUserId = import.meta.env.VITE_ADMIN_USER_ID || '';
-  const currentRcUserId = localStorage.getItem('extreamix_rc_user_id') || '';
-  const isAdmin = adminUserId && currentRcUserId === adminUserId;
-
-  // If admin view was selected but user is not admin, redirect to mixer
-  useEffect(() => {
-    if (currentView === 'admin' && !isAdmin) {
-      setCurrentView('mixer');
-    }
-  }, [currentView, isAdmin]);
-
-  // Subdomain Routing State
-  const [subdomain, setSubdomain] = useState<string | null>(null);
-
-  useEffect(() => {
-    // 1. Check for preview simulation parameter (since AI Studio domains don't support wildcard testing out of the box)
-    const urlParams = new URLSearchParams(window.location.search);
-    const forcedSubdomain = urlParams.get('subdomain');
-    
-    if (forcedSubdomain) {
-      setSubdomain(forcedSubdomain);
-      return;
-    }
-
-    // 2. Real wildcard routing check
-    const hostname = window.location.hostname;
-    const parts = hostname.split('.');
-    
-    // Match something.extreamix.com
-    if (parts.length >= 3 && parts[parts.length - 2] === 'extreamix' && (parts[parts.length - 1] === 'com' || parts[parts.length - 1] === 'net')) {
-      if (parts[0] !== 'www') {
-        setSubdomain(parts[0]);
-      }
-    } 
-    // Match something.localhost (for local testing)
-    else if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
-      if (parts[0] !== 'www') {
-        setSubdomain(parts[0]);
-      }
-    }
-  }, []);
-
- // Subdomain Routing State
-
-const [channels, setChannels] = useState<ChannelState[]>(() => {
- const defaultFX: FXState = {
-      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-    };
-
+  const [currentView, setCurrentView] = useState<View>('console');
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+  const [sources, setSources] = useState<VideoSource[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('extreamix_channels');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Migration: Ensure new fields exist
-        return parsed.map((ch: any) => ({
-          ...ch,
-          fx: ch.fx || defaultFX,
-          pitchCorrection: ch.pitchCorrection || 0,
-          beatCorrection: ch.beatCorrection || 0
-        }));
-      }
-    }
-    return [
-      // Defaulting to 0 channels to prevent confusion about "extra tracks without inputs"
-    ];
-  });
-  const [transcripts, setTranscripts] = useState<string[]>(["[SYSTEM_DIAGNOSTIC] CORE_ENGINE_v4 initialized.", "[SYSTEM_DIAGNOSTIC] Audio Context: READY.", "[SYSTEM_DIAGNOSTIC] Video Buffer: SYNCED."]);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
-  const handleTranscribe = () => {
-    // @ts-ignore
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setTranscripts(prev => [...prev, "Error: Speech API not supported in this browser."]);
-      return;
-    }
-
-    if (!recognitionRef.current) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        setIsTranscribing(true);
-        setTranscripts(prev => [...prev, "System: Live transcription session started."]);
-      };
-
-      recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setTranscripts(prev => [...prev, finalTranscript]);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsTranscribing(false);
-      };
-
-      recognition.onend = () => {
-        setIsTranscribing(false);
-        setTranscripts(prev => [...prev, "System: Transcription session ended."]);
-      };
-
-      recognitionRef.current = recognition;
-    }
-
-    if (isTranscribing) {
-      recognitionRef.current.stop();
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        // Already started
-      }
-    }
-  };
-
-  const [sequencer, setSequencer] = useState<SequencerState>(() => {
-    const defaultMasterFX: FXState = {
-      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-    };
-
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('extreamix_sequencer');
-      if (saved) {
-         try {
-           const parsed = JSON.parse(saved);
-           if (parsed.tracks) return {
-             ...parsed,
-             tempoDriftEnabled: parsed.tempoDriftEnabled || false,
-             masterVolume: parsed.masterVolume || 0.9,
-             masterFX: parsed.masterFX || defaultMasterFX
-           };
-         } catch(e) {}
-      }
-    }
-    return {
-      tracks: [
-        { id: 'low-band', name: 'BAND_LOW (200Hz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'LOW_BAND' },
-        { id: 'mid-band', name: 'BAND_MID (1kHz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'MID_BAND' },
-        { id: 'high-band', name: 'BAND_HIGH (3kHz)', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'HIGH_BAND' },
-        { id: 'aux-pulse', name: 'AUX_SIGNAL', division: 16, length: 16, steps: Array(16).fill(false), targetFilter: 'NONE' }
-      ],
-      bpm: 120,
-      isPlaying: false,
-      masterTick: 0,
-      tempoDriftEnabled: false,
-      tempoDriftThreshold: 40,
-      masterVolume: 0.9,
-      masterFX: defaultMasterFX
-    };
-  });
-  
-  // High-resolution clock tick to drive UI playheads
-  const [pulseActiveSteps, setPulseActiveSteps] = useState<{[key: string]: number}>({});
-  const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
-  const [customFilters, setCustomFilters] = useState<import('./types').CustomVideoFilter[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('extreamix_customFilters');
+      const saved = localStorage.getItem('extreamix_sources');
       if (saved) return JSON.parse(saved);
     }
-    return [];
+    return [
+      { id: 'default-cam', name: 'Webcam Feed', type: 'camera', stream: null, active: true, opacity: 1, scale: 1, position: { x: 0, y: 0 }, blendMode: 'source-over', zIndex: 1, customFilterId: null, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [] }
+    ];
   });
-  
-  useEffect(() => {
+  const [channels, setChannels] = useState<ChannelState[]>(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('extreamix_customFilters', JSON.stringify(customFilters));
+      const saved = localStorage.getItem('extreamix_channels');
+      if (saved) return JSON.parse(saved);
     }
-    videoEngine.setCustomFilters(customFilters);
-  }, [customFilters]);
-
-  const [routingSources, setRoutingSources] = useState<RoutingSource[]>([
-    { id: 'src-1', name: 'TAB_AUDIO_LOFI', active: true, type: 'tab' },
-    { id: 'src-2', name: 'MIC_INPUT_PRIMARY', active: true, type: 'mic' },
-    { id: 'src-3', name: 'OSC_GENERATOR_A', active: true, type: 'generator' },
-  ]);
-
-  const [routingDestinations] = useState<RoutingDestination[]>([
-    { id: 'dst-1', name: 'CONSOLE_CH_1' },
-    { id: 'dst-2', name: 'CONSOLE_CH_2' },
-    { id: 'dst-3', name: 'CONSOLE_CH_3' },
-    { id: 'dst-4', name: 'CONSOLE_CH_4' },
-    { id: 'dst-5', name: 'MASTER_OUT' },
-  ]);
-
-  const [routingConnections, setRoutingConnections] = useState<RoutingConnection[]>([
-    { sourceId: 'src-1', destinationId: 'dst-1' },
-    { sourceId: 'src-2', destinationId: 'dst-4' },
-    { sourceId: 'src-3', destinationId: 'dst-3' },
-  ]);
-
-  // --- EXTREAMIX Overhaul States ---
-  const [crossoverGates, setCrossoverGates] = useState(() => {
+    return [
+      { id: 'ch1', name: 'Main_Mix', volume: 0.8, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: { delay: { active: false }, reverb: { active: false }, chorus: { active: false }, phaser: { active: false } }, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [], routing: ['master'] },
+      { id: 'ch2', name: 'Mic_In', volume: 0.5, mute: false, solo: false, eq: { low: 0, mid: 0, high: 0 }, fx: { delay: { active: false }, reverb: { active: false }, chorus: { active: false }, phaser: { active: false } }, pitchCorrection: 0, beatCorrection: 0, pulseRouting: [], routing: ['master'] },
+    ];
+  });
+  const [transcripts, setTranscripts] = useState<string[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [sequencer, setSequencer] = useState<SequencerState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('extreamix_sequencer');
+      if (saved) return JSON.parse(saved);
+    }
+    return {
+      bpm: 120,
+      currentBeat: 0,
+      tracks: [
+        { id: 't1', name: 'Kick', active: true, volume: 1, pan: 0, division: 4, length: 4, sequence: [1, 0, 0, 0], triggerNode: null },
+        { id: 't2', name: 'Snare', active: true, volume: 1, pan: 0, division: 4, length: 4, sequence: [0, 0, 1, 0], triggerNode: null },
+        { id: 't3', name: 'HiHat', active: true, volume: 1, pan: 0, division: 8, length: 8, sequence: [1, 0, 1, 0, 1, 0, 1, 0], triggerNode: null },
+      ],
+      masterVolume: 1,
+      masterFX: { delay: { active: false }, reverb: { active: false }, chorus: { active: false }, phaser: { active: false } },
+    };
+  });
+  const [crossoverGates, setCrossoverGates] = useState<CrossoverState>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('extreamix_crossoverGates');
       if (saved) return JSON.parse(saved);
     }
-    return {
-      low200: true,
-      mid1000: false,
-      high3000: true
-    };
+    return { low: false, mid: false, high: false };
   });
-
-  const [shaderUniforms, setShaderUniforms] = useState({
-    rgbSplit: 0.5,
-    pixelation: 0.1
-  });
-
   const [matrixMappings, setMatrixMappings] = useState<MatrixMapping[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('extreamix_matrixMappings');
@@ -1853,15 +1242,19 @@ const [channels, setChannels] = useState<ChannelState[]>(() => {
       { id: 'm5', target: 'SHADER_PIXELATION', midiCC: 75, value: 0.1 }
     ];
   });
-
-  const [registryPresets, setRegistryPresets] = useState([
-    { id: 'p1', name: 'HYPER_DRIVE_01', description: 'Aggressive compression and extreme RGB splitting.', tags: ['AGGR', 'SYNC'], lastModified: '2026-04-18', patchData: '{"hue": "shift"}' },
-    { id: 'p2', name: 'VOID_AMBIENCE', description: 'Submersive low-pass routing with heavy pixelation.', tags: ['VOID', 'LO'], lastModified: '2026-04-17', patchData: '{"pixel": "max"}' },
+  const [registryPresets, setRegistryPresets] = useState<RegistryPreset[]>([
+    { id: 'p1', name: 'HYPER_DRIVE_01', description: 'Aggressive compression and extreme RGB splitting.', tags: ['AGGR', 'SYNC'], lastModified: '2026-04-18', patchData: '{"filters":{"low":-3,"mid":-2,"high":2},"uniforms":{"rgbSplit":0.2,"pixelation":0.05}}' },
+    { id: 'p2', name: 'VOID_AMBIENCE', description: 'Submersive low-pass routing with heavy pixelation.', tags: ['VOID', 'LO'], lastModified: '2026-04-17', patchData: '{"filters":{"low":5,"mid":-5,"high":-8},"uniforms":{"pixelation":0.8,"glow":0.1}}' },
   ]);
 
   // Master Limiter state for LED feedback in Console
   const [masterLimiterActive, setMasterLimiterActive] = useState(false);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('environment');
+  const [learningId, setLearningId] = useState<string | null>(null);
+  const [customVideoFilters, setCustomVideoFilters] = useState<CustomVideoFilter[]>([
+    {id: 'f1', name: 'VHS Glitch', shaderCode: 'precision mediump float;\nuniform sampler2D u_image;\nuniform float u_time;\nvarying vec2 v_texCoord;\nvoid main() {\n  vec2 uv = v_texCoord;\n  float glitch = sin(uv.y * 30.0 + u_time * 10.0) * 0.01;\n  gl_FragColor = texture2D(u_image, vec2(uv.x + glitch, uv.y));\n}'},
+    {id: 'f2', name: 'RGB Shift', shaderCode: 'precision mediump float;\nuniform sampler2D u_image;\nuniform float u_time;\nvarying vec2 v_texCoord;\nvoid main() {\n  vec2 uv = v_texCoord;\n  vec4 color;\n  color.r = texture2D(u_image, uv + vec2(sin(u_time * 2.0) * 0.01, 0.0)).r;\n  color.g = texture2D(u_image, uv + vec2(sin(u_time * 2.0 + 2.0) * 0.01, 0.0)).g;\n  color.b = texture2D(u_image, uv + vec2(sin(u_time * 2.0 + 4.0) * 0.01, 0.0)).b;\n  color.a = 1.0;\n  gl_FragColor = color;\n}'}
+  ]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1900,699 +1293,378 @@ const [channels, setChannels] = useState<ChannelState[]>(() => {
   // Master Engine Sync
   useEffect(() => {
     audioEngine.setMasterVolume(sequencer.masterVolume);
-    audioEngine.setTempoDriftThreshold(sequencer.tempoDriftThreshold);
     audioEngine.updateMasterFX(sequencer.masterFX);
-    audioEngine.updateCrossover(crossoverGates);
-  }, [sequencer.masterVolume, sequencer.tempoDriftThreshold, sequencer.masterFX, crossoverGates]);
+  }, [sequencer.masterVolume, sequencer.masterFX]);
 
-
+  // Channel Sync
   useEffect(() => {
-    // We only init if already launched (e.g. refresh after first launch)
-    if (isLaunched) {
-      audioEngine.init();
-      channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
-    }
-  }, []);
-
-  const toggleCrossoverGate = (gate: keyof typeof crossoverGates) => {
-    setCrossoverGates(prev => ({ ...prev, [gate]: !prev[gate] }));
-  };
-
-  const loadPreset = (presetId: string) => {
-    console.log(`[EXTREAMIX_LOADER] Injecting JSON patch for session: ${presetId}`);
-    // Simulate loading a preset by briefly triggering the limiter LED and logging
-    setMasterLimiterActive(true);
-    setTimeout(() => setMasterLimiterActive(false), 300);
-  };
-
-  const handleAddChannel = () => {
-    const defaultFX: FXState = {
-      delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-      reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-      chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-      phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-    };
-    const newChannelId = `ch-${Date.now()}`;
-    const newChannel: ChannelState = {
-      id: newChannelId,
-      name: `TRACK ${channels.length + 1}`,
-      volume: 0.8,
-      pan: 0,
-      depth: 0,
-      mute: false,
-      solo: false,
-      eq: { low: 0, mid: 0, high: 0 },
-      fx: defaultFX,
-      pitchCorrection: 0,
-      beatCorrection: 0,
-      pulseRouting: []
-    };
-    setChannels(prev => [...prev, newChannel]);
-    audioEngine.createChannel(newChannelId, newChannel);
-    setCurrentView('mixer');
-  };
-
-  const handleRouteExternalTab = async () => {
-    try {
-      let captureConfig: any = {
-        video: true,
-        audio: {
-          suppressLocalAudioPlayback: true,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        },
-        surfaceSwitching: "exclude",
-        selfBrowserSurface: "exclude",
-        monitorTypeSurfaces: "exclude",
-        preferCurrentTab: false
-      };
-      
-      // @ts-ignore
-      let controller;
-      // @ts-ignore
-      if (window.CaptureController) {
-        // @ts-ignore
-        controller = new CaptureController();
-        controller.setFocusBehavior("no-focus-change");
-        captureConfig.controller = controller;
-      }
-
-      // @ts-ignore - getDisplayMedia might not be in the type definitions for all environments
-      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
-      
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) videoTrack.stop(); // We only want audio
-      
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioEngine.routeStreamToChannel(stream, 'ch-1');
-        // Update transcription to show something happened
-        setChannels(prev => prev.map(ch => ch.id === 'ch-1' ? { ...ch, name: 'EXTERNAL AUDIO' } : ch));
-      }
-    } catch (err) {
-      console.error('Routing failed:', err);
-    }
-  };
-
-  const handlePlay = () => {
-    audioEngine.init();
-    if (sequencer.isPlaying) {
-      audioEngine.stopSequencer();
-      setSequencer(prev => ({ ...prev, isPlaying: false }));
-      setPulseActiveSteps({});
-    } else {
-      audioEngine.startSequencer(
-        sequencer.bpm, 
-        sequencer.tracks, 
-        sequencer.tempoDriftEnabled, 
-        sequencer.masterTempoSourceId
-      );
-      setSequencer(prev => ({ ...prev, isPlaying: true }));
-    }
-  };
-
-  useEffect(() => {
-    audioEngine.onStep = (trackId, step, isActive) => {
-      setPulseActiveSteps(prev => ({ ...prev, [trackId]: step }));
-      
-      if (!isActive) return;
-
-      // Update visual engine & state for latches
-      let needsStateUpdate = false;
-      videoEngine.getSources().forEach(source => {
-        if (source.pulseRouting && source.pulseRouting.includes(trackId)) {
-          source.pulseOpacity = 1;
-          needsStateUpdate = true;
-        }
-      });
-      if (needsStateUpdate) {
-        setVideoSources(videoEngine.getSources());
-      }
-    };
-
-    audioEngine.onBpmChange = (bpm) => {
-      setSequencer(prev => {
-        // Only update if it actually changed to prevent render loops
-        if (prev.bpm === bpm) return prev;
-        return { ...prev, bpm };
-      });
-    };
-
-    audioEngine.onLimiterActive = (active) => {
-      setMasterLimiterActive(active);
-    };
-
-    return () => {
-      audioEngine.onStep = () => {};
-      audioEngine.onBpmChange = undefined;
-      audioEngine.onLimiterActive = undefined;
-    };
-  }, []);
-  
-  // Animation loop to decay visual pulse Opacity
-  useEffect(() => {
-    let animId: number;
-    const decay = () => {
-      let changed = false;
-      videoEngine.getSources().forEach(source => {
-        if (source.pulseOpacity > 0) {
-          // Soft decay to produce a gated rolloff effect
-          source.pulseOpacity = Math.max(0, source.pulseOpacity - 0.03); 
-          changed = true;
-        }
-      });
-      if (changed) {
-        setVideoSources(videoEngine.getSources());
-      }
-      animId = requestAnimationFrame(decay);
-    };
-    decay();
-    return () => cancelAnimationFrame(animId);
-  }, []);
-
-  const [activeVideoSourceId, setActiveVideoSourceId] = useState<string | null>(null);
-
-  useEffect(() => {
-    videoEngine.onUpdateSource = (id, update) => {
-       setVideoSources(prev => prev.map(s => s.id === id ? { ...s, ...update } : s));
-    };
-    videoEngine.onSelectSource = (id) => {
-       setActiveVideoSourceId(id);
-       // Only switch view if we're not already in a view that handles imaging
-       // This prevents jarring jumps if the user is interacting with the canvas
-    };
-    return () => {
-      videoEngine.onUpdateSource = undefined;
-      videoEngine.onSelectSource = undefined;
-    };
-  }, []);
-
-  const handleAddCameraSource = async () => {
-    try {
-      audioEngine.init();
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: {
-          facingMode: cameraFacingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }, 
-        audio: true 
-      });
-      
-      const source = videoEngine.addSource(stream, `Camera Feed ${videoSources.length + 1}`);
-      
-      const hasAudio = stream.getAudioTracks().length > 0;
-      if (hasAudio) {
-        const newChannelId = `ch-cam-${Date.now()}`;
-        const newChannel: ChannelState = {
-          id: newChannelId,
-          name: `Cam ${videoSources.length + 1}`,
-          volume: 0.7,
-          pan: 0,
-          depth: 0,
-          mute: true,
-          solo: false,
-          eq: { low: 0, mid: 0, high: 0 },
-          fx: {
-            delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-            reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-            chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-            phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-          },
-          pitchCorrection: 0,
-          beatCorrection: 0
-        };
-        setChannels(prev => [...prev, newChannel]);
-        audioEngine.createChannel(newChannelId, newChannel);
-        source.audioChannelId = newChannelId;
-        audioEngine.routeStreamToChannel(stream, newChannelId, source.id);
-      }
-      
-      setVideoSources(prev => [...prev, source]);
-      setActiveVideoSourceId(source.id);
-    } catch (err) {
-      console.error('Failed to add camera source:', err);
-    }
-  };
-
-  const handleAddVideoSource = async () => {
-    try {
-      audioEngine.init();
-      // Basic check for mobile - getDisplayMedia is often restricted or buggy on mobile
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      let captureConfig: any = {
-        video: true,
-        audio: {
-          suppressLocalAudioPlayback: true,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        }
-      };
-
-      if (!isMobile) {
-        captureConfig.video = { displaySurface: "browser" };
-      }
-
-      const stream = await navigator.mediaDevices.getDisplayMedia(captureConfig);
-      
-      const source = videoEngine.addSource(stream, `Visual Source ${videoSources.length + 1}`);
-      
-      const hasAudio = stream.getAudioTracks().length > 0;
-      if (hasAudio) {
-        const newChannelId = `ch-vid-${Date.now()}`;
-        const newChannel: ChannelState = {
-          id: newChannelId,
-          name: `Feed ${videoSources.length + 1}`,
-          volume: 0.7,
-          pan: 0,
-          depth: 0,
-          mute: true,
-          solo: false,
-          eq: { low: 0, mid: 0, high: 0 },
-          fx: {
-            delay: { active: false, time: 0.3, feedback: 0.4, mix: 0.3 },
-            reverb: { active: false, roomSize: 0.5, mix: 0.3 },
-            chorus: { active: false, rate: 0.2, depth: 0.3, mix: 0.2 },
-            phaser: { active: false, rate: 0.1, depth: 0.5, mix: 0.2 }
-          },
-          pitchCorrection: 0,
-          beatCorrection: 0
-        };
-        setChannels(prev => [...prev, newChannel]);
-        audioEngine.createChannel(newChannelId, newChannel);
-        source.audioChannelId = newChannelId;
-        audioEngine.routeStreamToChannel(stream, newChannelId, source.id);
-      }
-      
-      setVideoSources(prev => [...prev, source]);
-      setActiveVideoSourceId(source.id);
-    } catch (err: any) {
-      console.error('Failed to add video source:', err);
-    }
-  };
-
-  const updateVideoSource = (id: string, update: Partial<VideoSource>) => {
-    const existing = videoSources.find(s => s.id === id);
-    if (!existing) return;
-
-    if (update.audioChannelId !== undefined && update.audioChannelId !== existing.audioChannelId) {
-      if (update.audioChannelId) {
-        audioEngine.routeStreamToChannel(existing.stream, update.audioChannelId, id);
-      }
-    }
-
-    videoEngine.updateSource(id, update);
-    setVideoSources(videoEngine.getSources());
-  };
-
-  const removeVideoSource = (id: string) => {
-    const source = videoSources.find(s => s.id === id);
-    if (!source) return;
-
-    // Cleanup audio
-    if (source.audioChannelId) {
-      audioEngine.removeChannel(source.audioChannelId);
-      setChannels(prev => prev.filter(ch => ch.id !== source.audioChannelId));
-    }
-
-    // Stop and cleanup stream
-    if (source.stream) {
-      source.stream.getTracks().forEach(track => track.stop());
-    }
-
-    videoEngine.removeSource(id);
-    setVideoSources(videoEngine.getSources());
-    if (activeVideoSourceId === id) setActiveVideoSourceId(null);
-  };
-
-  const toggleRoutingConnection = (sourceId: string, destinationId: string) => {
-    setRoutingConnections(prev => {
-      const exists = prev.find(c => c.sourceId === sourceId && c.destinationId === destinationId);
-      if (exists) {
-        return prev.filter(c => !(c.sourceId === sourceId && c.destinationId === destinationId));
-      }
-      return [...prev, { sourceId, destinationId }];
+    channels.forEach(channel => {
+      audioEngine.updateChannelVolume(channel.id, channel.volume);
+      audioEngine.updateChannelMute(channel.id, channel.mute);
+      audioEngine.updateChannelSolo(channel.id, channel.solo);
+      audioEngine.updateChannelEQ(channel.id, channel.eq);
+      audioEngine.updateChannelFX(channel.id, channel.fx);
+      audioEngine.updateChannelPitchCorrection(channel.id, channel.pitchCorrection);
+      audioEngine.updateChannelBeatCorrection(channel.id, channel.beatCorrection);
+      audioEngine.updateChannelRouting(channel.id, channel.routing);
+      audioEngine.updateChannelPulseRouting(channel.id, channel.pulseRouting);
     });
-  };
+  }, [channels]);
 
-  const updateChannel = (id: string, update: Partial<ChannelState>) => {
-    setChannels(prev => prev.map(ch => {
-      if (ch.id === id) {
-        const next = { ...ch, ...update };
-        audioEngine.updateChannel(id, next);
-        return next;
-      }
-      return ch;
-    }));
-  };
-
-  const toggleStep = (i: number) => {
-    const nextSteps = [...sequencer.steps];
-    nextSteps[i] = !nextSteps[i];
-    setSequencer(prev => ({ ...prev, steps: nextSteps }));
-  };
-
+  // Video Sync
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        audioEngine.init();
+    videoEngine.updateSources(sources);
+  }, [sources]);
+
+  // Cross-engine sync (sequencer BPM to audio engine)
+  useEffect(() => {
+    audioEngine.setBPM(sequencer.bpm);
+  }, [sequencer.bpm]);
+
+  // Initialize midiService
+  useEffect(() => {
+    midiService.init();
+    midiService.onCCMessage = (ccNumber, value) => {
+      if (learningId) {
+        // If in learn mode, resolve the promise
+        midiService.resolveLearnPromise(ccNumber);
+        setLearningId(null);
+      } else {
+        // If not in learn mode, apply to a mapped control
+        const mappedControl = matrixMappings.find(m => m.midiCC === ccNumber);
+        if (mappedControl) {
+          // Implement logic to update corresponding audio/video param with 'value'
+          console.log(`MIDI CC ${ccNumber} received with value ${value}, mapped to ${mappedControl.target}`);
+          // Example: update a matrix mapping's value based on MIDI CC input
+          setMatrixMappings(prevMappings =>
+            prevMappings.map(m =>
+              m.id === mappedControl.id ? { ...m, value: value / 127 } : m // Normalize MIDI value (0-127) to 0-1
+            )
+          );
+        }
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    midiService.onStateChange = (event) => {
+      console.log(`MIDI State Change: ${event.port.name} - ${event.port.state}`);
+    };
+
+    return () => {
+      // midiService.destroy(); // Implement if MidiService needs explicit cleanup
+    };
+  }, [learningId, matrixMappings, setMatrixMappings]); // Depend on learningId and matrixMappings for updates
+
+  const updateMatrixMapping = useCallback((id: string, update: Partial<MatrixMapping>) => {
+    setMatrixMappings(prev => prev.map(m => (m.id === id ? { ...m, ...update } : m)));
   }, []);
 
-  if (subdomain) {
-    return <BroadcastView username={subdomain} />;
-  }
+  const handleLearnMapping = useCallback(async (mappingId: string) => {
+    if (learningId === mappingId) {
+      // Already learning for this ID, cancel it
+      midiService.resolveLearnPromise(null); // Explicitly resolve with null to cancel
+      setLearningId(null);
+      return;
+    }
+    setLearningId(mappingId);
+    try {
+      const cc = await midiService.engageLearnMode(mappingId);
+      if (cc !== null) {
+        console.log(`Learned MIDI CC ${cc} for mapping ${mappingId}`);
+        updateMatrixMapping(mappingId, { midiCC: cc });
+      } else {
+        console.log(`MIDI learn for ${mappingId} timed out.`);
+      }
+    } catch (error) {
+      console.error(`MIDI learn error for ${mappingId}:`, error);
+    } finally {
+      setLearningId(null); // Always clear learning state
+    }
+  }, [learningId, updateMatrixMapping, setLearningId]);
+
+
+  const handleSetMasterLimiterActive = useCallback((active: boolean) => {
+    setMasterLimiterActive(active);
+  }, []);
+
+  const addChannel = useCallback(() => {
+    setChannels(prev => [
+      ...prev,
+      { 
+        id: `ch${prev.length + 1}`, 
+        name: `New_Channel_${prev.length + 1}`, 
+        volume: 0.7,
+        mute: false,
+        solo: false,
+        eq: { low: 0, mid: 0, high: 0 },
+        fx: { delay: { active: false }, reverb: { active: false }, chorus: { active: false }, phaser: { active: false } },
+        pitchCorrection: 0,
+        beatCorrection: 0,
+        pulseRouting: [],
+        routing: ['master'],
+      },
+    ]);
+  }, []);
+
+  const updateChannel = useCallback((id: string, update: Partial<ChannelState>) => {
+    setChannels(prev => prev.map(channel => (channel.id === id ? { ...channel, ...update } : channel)));
+  }, []);
+
+  const toggleCrossoverGate = useCallback((gate: keyof CrossoverState) => {
+    setCrossoverGates(prev => ({ ...prev, [gate]: !prev[gate] }));
+  }, []);
+
+  // Transcribing Audio (Whisper)
+  const handleTranscribe = useCallback(async () => {
+    if (isTranscribing) return;
+    setIsTranscribing(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const audioChunks: Blob[] = [];
+
+      recorder.ondataavailable = event => {
+        audioChunks.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const formData = new FormData();
+        formData.append('audio', audioBlob);
+
+        // Dummy API call for transcription
+        // Replace with actual API endpoint (e.g., your Cloud Run service)
+        // const response = await fetch('/api/transcribe', {
+        //   method: 'POST',
+        //   body: formData,
+        // });
+        // const data = await response.json();
+        // setTranscripts(prev => [data.text, ...prev]);
+
+        // Mock transcription for now
+        setTimeout(() => {
+          const mockText = `[Mock] User said: Lorem ipsum dolor sit amet, consectetur adipiscing elit. (${new Date().toLocaleTimeString()})`;
+          setTranscripts(prev => [mockText, ...prev]);
+          setIsTranscribing(false);
+        }, 1500);
+      };
+
+      recorder.start();
+      setTimeout(() => {
+        recorder.stop();
+        stream.getTracks().forEach(track => track.stop());
+      }, 5000); // Record for 5 seconds
+
+    } catch (error) {
+      console.error('Error accessing microphone for transcription:', error);
+      setIsTranscribing(false);
+    }
+  }, [isTranscribing]);
+
+  const addSource = useCallback(() => {
+    setSources(prev => [
+      ...prev,
+      { 
+        id: `src${prev.length + 1}`, 
+        name: `New_Source_${prev.length + 1}`, 
+        type: 'image', 
+        url: 'https://source.unsplash.com/random/1920x1080', 
+        stream: null, 
+        active: true, 
+        opacity: 1, 
+        scale: 1, 
+        position: { x: 0, y: 0 }, 
+        blendMode: 'source-over', 
+        zIndex: prev.length + 1,
+        customFilterId: null,
+        pitchCorrection: 0,
+        beatCorrection: 0,
+        pulseRouting: [],
+      },
+    ]);
+  }, []);
+
+  const addCameraSource = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacingMode } });
+      setSources(prev => [
+        ...prev,
+        { 
+          id: `cam${prev.length + 1}`, 
+          name: `${cameraFacingMode === 'user' ? 'Front' : 'Back'} Camera`, 
+          type: 'camera', 
+          stream: stream, 
+          active: true, 
+          opacity: 1, 
+          scale: 1, 
+          position: { x: 0, y: 0 }, 
+          blendMode: 'source-over', 
+          zIndex: prev.length + 1,
+          customFilterId: null,
+          pitchCorrection: 0,
+          beatCorrection: 0,
+          pulseRouting: [],
+        },
+      ]);
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      alert('Failed to access camera. Please ensure permissions are granted.');
+    }
+  }, [cameraFacingMode]);
+
+  const updateSource = useCallback((id: string, update: Partial<VideoSource>) => {
+    setSources(prev => prev.map(source => (source.id === id ? { ...source, ...update } : source)));
+  }, []);
+
+  const removeSource = useCallback((id: string) => {
+    setSources(prev => prev.filter(source => source.id !== id));
+  }, []);
+
+  const loadPreset = useCallback((patchData: string) => {
+    try {
+      const patch = JSON.parse(patchData);
+      audioEngine.applyPatch(patch);
+      videoEngine.applyPatch(patch);
+      console.log('Applied preset patch:', patch);
+    } catch (error) {
+      console.error('Failed to load preset:', error);
+    }
+  }, []);
+
+  const { user, isPro, isLoading, login, logout } = useSubscription();
+
+  // Admin check (simple for now, replace with actual auth/roles)
+  const isAdmin = typeof window !== 'undefined' && user?.id === import.meta.env.VITE_ADMIN_USER_ID;
 
   if (!isLaunched) {
-    return <LandingPage 
-      onInitiate={() => {
-        audioEngine.init();
-        setIsLaunched(true);
-        // Create initial channels after init
-        channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
-      }} 
-      packages={packages}
-      isPro={isPro}
-isPurchasing={isPurchasing}
- onPurchase={async () => {
- try {
- const success = await purchase();
- if (success) {
- audioEngine.init();
- setIsLaunched(true);
- channels.forEach(ch => audioEngine.createChannel(ch.id, ch));
- }
- } catch(e) {
- console.error("Purchase error", e);
- }
- }}
-    />;
+    return <LandingPage onLaunch={() => setIsLaunched(true)} onLogin={login} />;
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-surface overflow-hidden">
-      {/* Top Bar - Simplified for mobile */}
-      <header className="h-14 md:h-16 flex-shrink-0 px-4 md:px-8 flex items-center justify-between bg-surface/80 backdrop-blur-xl border-b border-white/5 z-50">
-        <div className="flex items-center gap-4 md:gap-12">
-          <div className="flex flex-col">
-            <h1 className="text-lg md:text-2xl font-black text-primary italic font-headline tracking-tighter glow-text leading-none">EXTREAMIX</h1>
-            <div className="flex items-center gap-2 mt-1 hidden sm:flex">
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              <span className="font-headline text-[7px] text-outline tracking-[0.2em] font-black uppercase">CORE_ENGINE_v4 // STATUS_NOMINAL</span>
+    <div className="min-h-screen bg-background text-white flex flex-col md:flex-row font-sans relative">
+      {/* Global Gradient Overlay */}
+      <div className="fixed inset-0 pointer-events-none z-50 opacity-20" style={{ background: 'radial-gradient(circle at top left, #38bdf840, transparent 50%), radial-gradient(circle at bottom right, #56e5a940, transparent 50%)' }}></div>
+
+      {/* Sidebar Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 md:relative md:w-20 md:min-w-[80px] bg-surface-container-low/80 backdrop-blur-2xl border-t border-white/5 md:border-t-0 md:border-r md:pt-6 flex flex-row md:flex-col items-center justify-around md:justify-start gap-1 md:gap-2 z-40">
+        <div className="hidden md:flex items-center justify-center p-4">
+          <img src="/extreamix_logo_icon.svg" alt="Extreamix Logo" className="w-8 h-8 drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
+        </div>
+        <NavItem icon={Play} label="Console" active={currentView === 'console'} onClick={() => setCurrentView('console')} />
+        <NavItem icon={LayoutGrid} label="Imaging" active={currentView === 'imaging'} onClick={() => setCurrentView('imaging')} />
+        <NavItem icon={SlidersHorizontal} label="Crossover" active={currentView === 'filter-matrix'} onClick={() => setCurrentView('filter-matrix')} />
+        <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'matrix-mapper'} onClick={() => setCurrentView('matrix-mapper')} />
+        <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
+        <NavItem icon={PackagePlus} label="Addons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
+        <NavItem icon={User} label="Profile" active={currentView === 'profile'} onClick={() => setCurrentView('profile')} />
+        {isAdmin && (
+          <NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
+        )}
+      </nav>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col pt-4 pb-20 md:py-4 md:pl-4 min-h-screen relative z-10">
+        <div className="flex-1 flex flex-col bg-surface-container/60 rounded-3xl backdrop-blur-3xl border border-white/10 overflow-hidden shadow-xl">
+          <div className="p-4 md:p-6 flex items-center justify-between border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <img src="/extreamix_logo_icon.svg" alt="Extreamix Logo" className="w-6 h-6 md:w-8 md:h-8 drop-shadow-[0_0_10px_rgba(56,189,248,0.5)] md:hidden" />
+              <h1 className="font-headline text-xl md:text-2xl text-white font-black tracking-tighter uppercase leading-none italic glow-text">{currentView.replace('-', ' ')}</h1>
+              <span className="bg-primary/10 text-primary text-[8px] font-mono px-2 py-1 rounded-full uppercase">v0.9.0</span>
+            </div>
+            <div className="flex items-center gap-4">
+              {!isPro && <AdBanner className="hidden sm:block" />}
+              <button onClick={logout} className="px-4 py-2 bg-white/10 text-white rounded-lg font-headline text-[10px] uppercase font-black hover:bg-white/20 transition-all">LOGOUT</button>
             </div>
           </div>
-          <nav className="hidden xl:flex items-center gap-8">
-            {['PROJ_INF', 'EXP_LOG', 'SYS_CFG'].map((item, i) => (
-<button
-key={item}
-onClick={() => {
-if (item === 'SYS_CFG') setIsSettingsOpen(true);
-else if (!isPro) {
-purchase();
-} else {
-alert(item + " module loading...");
-}
-}}
-className={`font-headline text-[10px] tracking-[0.2em] font-bold ${item === 'SYS_CFG' ? 'text-primary' : 'text-outline hover:text-white transition-colors'}`}
->
-                {item}
-              </button>
-            ))}
-          </nav>
-        </div>
 
-        <div className="hidden lg:flex items-center gap-6 px-4 py-2 bg-white/5 rounded-xl border border-white/5 mx-4">
-           {[
-             { label: 'SAMP', val: '48.0' },
-             { label: 'LAT', val: '0.4MS' },
-             { label: 'BUF', val: '2048' }
-           ].map(stat => (
-             <div key={stat.label} className="flex flex-col items-center">
-               <span className="font-headline text-[6px] text-outline tracking-widest leading-none mb-1 uppercase">{stat.label}</span>
-               <span className="font-mono text-[9px] text-white font-black leading-none">{stat.val}</span>
-             </div>
-           ))}
-        </div>
-
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="flex items-center bg-surface-container-high rounded-xl overflow-hidden shadow-2xl scale-90 md:scale-100">
-            <button 
-              onClick={handlePlay}
-              className={`px-4 md:px-6 py-2 flex md:py-2.5 items-center gap-2 font-headline font-black text-[10px] md:text-xs transition-all ${
-                sequencer.isPlaying ? 'bg-error text-on-error animate-pulse' : 'bg-primary text-on-primary-container'
-              }`}
-            >
-              {sequencer.isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span className="hidden sm:inline">{sequencer.isPlaying ? 'STOP' : 'PLAY'}</span>
-            </button>
-            <div className="px-2 md:px-4 border-l border-white/10 flex items-center gap-2">
-              <input 
-                type="number" 
-                value={sequencer.bpm}
-                onChange={e => setSequencer(prev => ({ ...prev, bpm: parseInt(e.target.value) || 120 }))}
-                className="w-10 bg-transparent border-none text-white font-headline font-bold text-[10px] md:text-xs focus:ring-0 text-center p-0"
+          <div className="flex-1 flex flex-col">
+            {currentView === 'console' && (
+              <ConsoleView 
+                channels={channels} 
+                updateChannel={updateChannel}
+                transcripts={transcripts}
+                masterLimiterActive={masterLimiterActive}
+                crossoverGates={crossoverGates}
+                toggleCrossoverGate={toggleCrossoverGate}
+                onTranscribe={handleTranscribe}
+                isTranscribing={isTranscribing}
+                sequencer={sequencer}
+                setSequencer={setSequencer}
+                learningId={learningId}
+                setLearningId={setLearningId}
+                handleLearnMapping={handleLearnMapping}
               />
-              <span className="text-[8px] md:text-[9px] text-outline font-headline font-bold">BPM</span>
-            </div>
-          </div>
-
-          <div className="h-8 w-[1px] bg-white/10 mx-1 md:mx-2 hidden sm:block" />
-          <div className="flex items-center gap-1">
-            <IconButton icon={Settings} label="General Settings" className="scale-90 md:scale-100" onClick={() => setIsSettingsOpen(true)} />
-            <button onClick={() => setCurrentView('profile')} className="w-8 h-8 rounded-full border border-primary/30 ml-2 md:ml-4 overflow-hidden relative flex-shrink-0 hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50">
-               <img src="https://picsum.photos/seed/sonicuser/64/64" alt="User Profile Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {!isPro && <AdBanner />}
-
-      <div className="flex-1 flex flex-col-reverse md:flex-row overflow-hidden relative min-h-0">
-        {/* Navigation - Bottom bar on mobile (flow), Sidebar on desktop */}
-        <nav className="relative w-full h-16 md:h-full flex-shrink-0 bg-surface-container-high/90 backdrop-blur-xl border-t md:border-t-0 border-white/5 flex items-center justify-around z-40 transition-all md:w-20 lg:w-24 md:flex-col md:border-r md:justify-start md:py-4">
-           <button onClick={() => setCurrentView('mixer')} className="hidden md:flex w-10 h-10 md:w-12 md:h-12 rounded-xl bg-surface-container-high border border-primary/20 items-center justify-center mb-4 flex-shrink-0 hover:bg-surface-container-highest transition-colors group" title="Return to Extreamix Console">
-            <Music className="w-5 h-5 md:w-6 md:h-6 text-primary group-hover:scale-110 transition-transform" />
-          </button>
-          <div className="flex justify-around md:justify-start md:flex-col w-full md:space-y-1 md:flex-1 md:overflow-y-auto custom-scrollbar md:min-h-0 overflow-x-auto md:overflow-x-hidden hide-scrollbar">
-            <NavItem icon={SlidersHorizontal} label="Console" active={currentView === 'mixer'} onClick={() => setCurrentView('mixer')} />
-            <NavItem icon={Video} label="Imaging" active={currentView === 'vision'} onClick={() => setCurrentView('vision')} />
-            <NavItem icon={Zap} label="Filters" active={currentView === 'filters'} onClick={() => setCurrentView('filters')} />
-            <NavItem icon={RouteIcon} label="Matrix" active={currentView === 'routing'} onClick={() => setCurrentView('routing')} />
-            <NavItem icon={LibraryIcon} label="Registry" active={currentView === 'library'} onClick={() => setCurrentView('library')} />
-            <NavItem icon={Wand2} label="AI Filter" active={currentView === 'filter-designer'} onClick={() => {
- if (!isPro && !hasEntitlement(ENTITLEMENTS.AI_FILTER_FORGE)) {
- purchase();
- } else {
- setCurrentView('filter-designer');
- }
- }} />
-<NavItem icon={PackagePlus} label="Add-ons" active={currentView === 'addons'} onClick={() => setCurrentView('addons')} />
-{isAdmin && (
-<NavItem icon={Shield} label="Admin" active={currentView === 'admin'} onClick={() => setCurrentView('admin')} />
-)}
-          </div>
-
-          <div className="hidden md:flex flex-col items-center mt-auto space-y-4 w-full md:pt-4 flex-shrink-0">
-            <button onClick={handleAddChannel} className="mx-auto w-16 h-8 rounded border border-primary/30 text-primary font-headline text-[9px] font-bold hover:bg-primary/10 transition-all active:scale-95">ADD_TRK</button>
-          </div>
-        </nav>
-
-        {/* Workspace */}
-        <main className="flex-1 relative overflow-hidden">
-          <div className="absolute inset-0 flex flex-col p-2 md:p-6 lg:p-8 overflow-hidden z-10">
-            <div className="absolute inset-0 flex items-center justify-center opacity-[0.005] pointer-events-none select-none overflow-hidden">
-              <span className="font-headline text-[20rem] md:text-[40rem] font-black pointer-events-none uppercase">{currentView}</span>
-            </div>
-
-            <AnimatePresence>
-            {isSettingsOpen && (
-              <motion.div 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-              >
-                <motion.div 
-                  initial={{ scale: 0.95, y: 20 }}
-                  animate={{ scale: 1, y: 0 }}
-                  exit={{ scale: 0.95, y: 20 }}
-                  className="w-full max-w-md bg-surface border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl relative"
-                >
-                  <button 
-                    onClick={() => setIsSettingsOpen(false)}
-                    className="absolute top-4 right-4 text-outline hover:text-white"
-                  >
-                     ✕
-                  </button>
-                  <h2 className="font-headline text-xl text-primary font-black uppercase tracking-widest mb-6 border-b border-white/10 pb-4">System configuration</h2>
-                  
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Subscription & Access</h3>
-<button 
- disabled={isPurchasing}
- onClick={openManagement}
- className="w-full py-3 px-4 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all mb-6"
- >
- MANAGE SUBSCRIPTION
- </button>
-                    </div>
-
-                    <div>
-                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Memory Allocation</h3>
-                      <button 
-                        onClick={() => {
-                          localStorage.clear();
-                          window.location.reload();
-                        }}
-                        className="w-full py-3 px-4 bg-error/10 hover:bg-error/20 border border-error/30 text-error rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all"
-                      >
-                         PURGE_LOCAL_CACHE // FACTORY_RESET
-                      </button>
-                      <p className="mt-2 text-[10px] font-mono text-outline/50 uppercase">Clears all saved channels, sequencer patterns, and routing matrix configs.</p>
-                    </div>
-
-                    <div>
-                      <h3 className="font-headline text-xs text-outline tracking-wider uppercase mb-2">Session Interface</h3>
-                      <button 
-                         onClick={() => {
-                           localStorage.removeItem('extreamix_isLaunched');
-                           window.location.reload();
-                         }}
-                         className="w-full py-3 px-4 bg-surface-container-high hover:bg-surface-container-highest border border-white/10 text-white rounded-xl font-headline text-[10px] tracking-widest uppercase transition-all"
-                      >
-                         RETURN_TO_ACQUISITION_TERMINAL
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              </motion.div>
             )}
-          </AnimatePresence>
-          
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentView}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="flex-1 flex flex-col h-full overflow-hidden"
-            >
-              {currentView === 'vision' && (
-                <ImagingView 
-                  sources={videoSources} 
-                  onUpdate={updateVideoSource} 
-                  onRemove={removeVideoSource}
-                  onAdd={handleAddVideoSource} 
-                  onAddCamera={handleAddCameraSource}
-                  channels={channels} 
-                  activeSourceId={activeVideoSourceId}
-                  sequencer={sequencer}
-                  cameraFacingMode={cameraFacingMode}
-                  setCameraFacingMode={setCameraFacingMode}
-                  customFilters={customFilters}
-                />
-              )}
-              {currentView === 'mixer' && (
-                <ConsoleView 
-                  channels={channels} 
-                  updateChannel={updateChannel} 
-                  transcripts={transcripts} 
-                  masterLimiterActive={masterLimiterActive}
-                  crossoverGates={crossoverGates}
-                  toggleCrossoverGate={toggleCrossoverGate}
-                  onTranscribe={handleTranscribe}
-                  isTranscribing={isTranscribing}
-                  sequencer={sequencer}
-                  setSequencer={setSequencer}
-                />
-              )}
-              {currentView === 'filters' && (
-                <FilterMatrixView 
-                  state={sequencer} 
-                  activeSteps={pulseActiveSteps}
-                  onUpdateTrack={(trackId, updates) => {
-                    setSequencer(prev => ({
-                      ...prev,
-                      tracks: prev.tracks.map(t => t.id === trackId ? { ...t, ...updates } : t)
-                    }))
-                  }}
-                  onBpmChange={(bpm) => setSequencer(prev => ({ ...prev, bpm }))}
-                  onTogglePlay={handlePlay}
-                  onUpdateSequencer={(updates) => setSequencer(prev => ({ ...prev, ...updates }))}
-                  channels={channels}
-                />
-              )}
-              {currentView === 'routing' && (
-                <MatrixView 
-                  mappings={matrixMappings} 
-                />
-              )}
-              {currentView === 'library' && (
-                <RegistryView 
-                  presets={registryPresets}
-                  onLoadPreset={loadPreset}
-                />
-              )}
-{currentView === 'addons' && (
- <AddonsView 
- activeEntitlements={activeEntitlements}
- isPro={isPro}
- onPurchaseAddon={purchaseAddon}
- />
- )}
-              {currentView === 'filter-designer' && (
-                <FilterDesignerView 
-                  activeEntitlements={activeEntitlements}
-                  videoSources={videoSources}
-                  customFilters={customFilters}
-                  setCustomFilters={setCustomFilters}
-                />
-              )}
-              {currentView === 'admin' && (
-                <AdminDashboard />
-              )}
-{currentView === 'profile' && (
- <ProfileView subscription={subscription} onOpenManagement={openManagement} />
- )}
-            </motion.div>
-          </AnimatePresence>
-          </div>
-        </main>
-      </div>
-
-      {/* Footer / Preview Strip - Hidden on small mobile */}
-      <footer className="h-14 md:h-20 flex-shrink-0 px-4 md:px-8 bg-surface-container-high/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between z-30 hidden sm:flex">
-        <div className="flex items-center gap-3 md:gap-6">
-          <button 
-            onClick={handlePlay}
-            aria-label={sequencer.isPlaying ? "Stop sequence" : "Play sequence"}
-            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border flex items-center justify-center transition-all ${
-            sequencer.isPlaying ? 'bg-primary/20 border-primary text-primary shadow-[0_0_15px_rgba(56,189,248,0.2)]' : 'bg-surface-container-low border-white/10 text-outline'
-          }`}>
-             {sequencer.isPlaying ? <Square className="w-4 h-4 md:w-5 md:h-5 fill-current" aria-hidden="true" /> : <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5" aria-hidden="true" />}
-          </button>
-          <div className="hidden sm:block">
-            <div className="font-headline text-[10px] md:text-sm font-bold text-primary truncate max-w-[120px] md:max-w-[200px]">LIVE_STREAM_BUFFER</div>
-            <div className="font-headline text-[8px] md:text-[10px] text-outline uppercase tracking-widest">Master Feed • 48kHz / 24bit</div>
+            {currentView === 'imaging' && (
+              <ImagingView 
+                sources={sources}
+                onUpdate={updateSource}
+                onRemove={removeSource}
+                onAdd={addSource}
+                onAddCamera={addCameraSource}
+                channels={channels}
+                activeSourceId={activeSourceId}
+                sequencer={sequencer}
+                cameraFacingMode={cameraFacingMode}
+                setCameraFacingMode={setCameraFacingMode}
+                customFilters={customVideoFilters}
+              />
+            )}
+            {currentView === 'filter-designer' && (
+              <FilterDesignerView 
+                activeEntitlements={activeEntitlements}
+                customFilters={customVideoFilters}
+                setCustomFilters={setCustomVideoFilters}
+              />
+            )}
+            {currentView === 'filter-matrix' && (
+              <FilterMatrixView 
+                crossoverGates={crossoverGates}
+                toggleCrossoverGate={toggleCrossoverGate}
+                matrixMappings={matrixMappings}
+                updateMatrixMapping={updateMatrixMapping}
+                channels={channels}
+                sequencer={sequencer}
+                learningId={learningId}
+                setLearningId={setLearningId}
+                handleLearnMapping={handleLearnMapping}
+              />
+            )}
+            {currentView === 'matrix-mapper' && (
+              <MatrixView
+                mappings={matrixMappings}
+                learningId={learningId}
+                setLearningId={setLearningId}
+                handleLearnMapping={handleLearnMapping}
+              />
+            )}
+            {currentView === 'library' && (
+              <RegistryView 
+                presets={registryPresets}
+                onLoadPreset={loadPreset}
+              />
+            )}
+            {currentView === 'addons' && (
+              <AddonsView 
+                activeEntitlements={activeEntitlements}
+                isPro={isPro}
+                onPurchaseAddon={purchaseAddon}
+              />
+            )}
+            {currentView === 'profile' && (
+              <ProfileView 
+                user={user}
+                logout={logout}
+                isPro={isPro}
+                activeEntitlements={activeEntitlements}
+              />
+            )}
+            {isAdmin && currentView === 'admin' && (
+              <AdminDashboard />
+            )}
           </div>
         </div>
-
-        <div className="flex items-center gap-6 md:gap-12">
-           <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black/40 rounded-xl border border-white/5">
-              <VUMeter analyser={audioEngine.getMasterAnalyser()} orientation="horizontal" className="w-32 h-2" />
-           </div>
-        </div>
-      </footer>
+      </main>
     </div>
   );
-}
+};
 
+export default App;
