@@ -48,7 +48,7 @@ router.get("/:domain/records", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "An internal server error occurred while retrieving DNS records." });
   }
 });
 
@@ -87,7 +87,7 @@ router.post("/:domain/records", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "An internal server error occurred while creating the DNS record." });
   }
 });
 
@@ -121,7 +121,7 @@ router.delete("/:domain/records/:id", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "An internal server error occurred while deleting the DNS record." });
   }
 });
 
