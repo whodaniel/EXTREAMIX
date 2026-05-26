@@ -523,7 +523,9 @@ const ImagingView = ({
                   </div>
                 </div>
               </Reorder.Item>
-            ))}</Reorder.Group>
+            );
+          })}
+          </Reorder.Group>
          </div>
       </aside>
     </div>
@@ -698,7 +700,7 @@ const ConsoleView = ({
                          <fx.icon className="w-3 h-3" />
                          <span className="text-[6px] font-black">LERN</span>
                       </button>
-                    )))}
+                    ))}
                  </div>
               </div>
 
