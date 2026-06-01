@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 
-const router = Router();
+const router = express.Router();
 
 /**
  * RevenueCat Webhook Handler
@@ -46,7 +47,8 @@ router.post('/revenuecat', async (req: Request, res: Response) => {
   }
 
   try {
-    const event = req.body;
+    // req.body might be a Buffer due to express.raw() middleware in server.ts
+    const event = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
     
     // RevenueCat v2 webhooks send events in an array under "events"
     // RevenueCat v1 sends a single event object
