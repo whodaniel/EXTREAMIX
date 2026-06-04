@@ -1,6 +1,6 @@
-import { Router } from "express";
+import express from "express";
 
-const router = Router();
+const router = express.Router();
 
 // Middleware to protect routes
 router.use((req, res, next) => {
@@ -48,7 +48,7 @@ router.get("/:domain/records", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -87,7 +87,7 @@ router.post("/:domain/records", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -121,7 +121,7 @@ router.delete("/:domain/records/:id", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

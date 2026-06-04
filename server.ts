@@ -20,9 +20,9 @@ async function startServer() {
 
   // Re-parse webhook body as JSON (since raw middleware consumed it)
   app.use('/api/webhooks/revenuecat', (req, res, next) => {
-    if (typeof req.body === 'string') {
+    if (Buffer.isBuffer(req.body)) {
       try {
-        req.body = JSON.parse(req.body);
+        req.body = JSON.parse(req.body.toString('utf8'));
       } catch {
         // Not JSON, leave as-is
       }
