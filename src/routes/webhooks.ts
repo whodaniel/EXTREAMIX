@@ -46,7 +46,24 @@ router.post('/revenuecat', async (req: Request, res: Response) => {
   }
 
   try {
-    const event = req.body;
+    let event = req.body;
+
+    // Server uses express.raw() for webhooks, so body is a Buffer
+    if (Buffer.isBuffer(req.body)) {
+      try {
+        event = JSON.parse(req.body.toString('utf8'));
+      } catch (parseError) {
+        console.error('[RC Webhook] Error parsing webhook body:', parseError);
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
+    } else if (typeof req.body === 'string') {
+      try {
+        event = JSON.parse(req.body);
+      } catch (parseError) {
+        console.error('[RC Webhook] Error parsing webhook body string:', parseError);
+        return res.status(400).json({ error: 'Invalid JSON string payload' });
+      }
+    }
     
     // RevenueCat v2 webhooks send events in an array under "events"
     // RevenueCat v1 sends a single event object
