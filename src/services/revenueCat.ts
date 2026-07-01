@@ -1,6 +1,10 @@
 import { Purchases } from "@revenuecat/purchases-js";
 
-const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || "test_ITxRpLmmpSGKyollhSyQTqPXMhP";
+const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
+
+if (!apiKey) {
+  throw new Error("VITE_REVENUECAT_PUBLIC_KEY is not defined");
+}
 
 // --- Entitlement Identifiers (must match RevenueCat dashboard) ---
 export const ENTITLEMENTS = {
