@@ -18,18 +18,6 @@ async function startServer() {
   // Standard JSON body parser for other routes
   app.use(express.json());
 
-  // Re-parse webhook body as JSON (since raw middleware consumed it)
-  app.use('/api/webhooks/revenuecat', (req, res, next) => {
-    if (typeof req.body === 'string') {
-      try {
-        req.body = JSON.parse(req.body);
-      } catch {
-        // Not JSON, leave as-is
-      }
-    }
-    next();
-  });
-
   // API routes
   app.use('/api/dns', dnsRoutes);
 
