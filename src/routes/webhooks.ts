@@ -46,8 +46,11 @@ router.post('/revenuecat', async (req: Request, res: Response) => {
   }
 
   try {
-    const event = req.body;
-    
+    let event = req.body;
+    if (Buffer.isBuffer(req.body)) {
+      event = JSON.parse(req.body.toString('utf8'));
+    }
+
     // RevenueCat v2 webhooks send events in an array under "events"
     // RevenueCat v1 sends a single event object
     const events = event.events || [event];
