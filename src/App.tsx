@@ -165,7 +165,6 @@ const ImagingView = ({
       videoEngine.init(canvasRef.current);
       try {
         const stream = canvasRef.current.captureStream(30);
-        // @ts-ignore
         window.extreamixMainStream = stream;
         
         if (pipVideoRef.current) {
@@ -179,7 +178,6 @@ const ImagingView = ({
     const checkScreens = async () => {
       if ('getScreenDetails' in window) {
         try {
-          // @ts-ignore
           const details = await window.getScreenDetails();
           setScreens(details.screens);
         } catch (e) {
