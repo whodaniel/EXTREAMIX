@@ -165,7 +165,6 @@ const ImagingView = ({
       videoEngine.init(canvasRef.current);
       try {
         const stream = canvasRef.current.captureStream(30);
-        // @ts-ignore
         window.extreamixMainStream = stream;
         
         if (pipVideoRef.current) {
