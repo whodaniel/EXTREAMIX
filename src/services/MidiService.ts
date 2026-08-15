@@ -1,4 +1,4 @@
-class DynamicMidiService {
+export class DynamicMidiService {
   private activeLearnPromiseResolve: ((cc: number | null) => void) | null = null;
   private activeLearnTimeout: ReturnType<typeof setTimeout> | null = null;
   private activeParamId: string | null = null;
