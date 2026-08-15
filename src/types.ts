@@ -120,3 +120,8 @@ export interface RegistryPreset {
   lastModified: string;
   patchData: string; // JSON string
 }
+declare global {
+  interface Window {
+    extreamixMainStream: MediaStream;
+  }
+}
