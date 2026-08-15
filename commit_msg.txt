@@ -1,0 +1,6 @@
+🧹 [code health improvement] Define types for custom window properties to remove @ts-ignore
+
+🎯 What: Added a `src/global.d.ts` file to properly type custom properties (`extreamixMainStream` and `getScreenDetails`) on the `Window` object, allowing the removal of two `// @ts-ignore` directives in `src/App.tsx`.
+💡 Why: Replaces unsafe type bypasses with proper TypeScript definitions, improving code health, maintainability, and providing autocomplete/type-checking for these properties moving forward.
+✅ Verification: Ran `npm run lint` and verified that no new TypeScript errors were introduced (pre-existing syntax errors were unaffected). Used `git diff` to ensure only the target `@ts-ignore` comments were removed.
+✨ Result: Cleaner code in `App.tsx` and improved type safety for global properties without altering behavior.
