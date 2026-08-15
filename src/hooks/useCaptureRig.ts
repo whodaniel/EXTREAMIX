@@ -63,7 +63,6 @@ export const useCaptureRig = () => {
 
       recorder.start();
       setIsRecording(true);
-      console.log('Recording started');
     } catch (err) {
       console.error('Failed to start recording:', err);
     }
@@ -73,7 +72,6 @@ export const useCaptureRig = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      console.log('Recording stopped');
     }
   }, []);
 
