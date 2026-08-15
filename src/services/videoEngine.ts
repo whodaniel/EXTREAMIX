@@ -110,6 +110,8 @@ class VideoFilterEngine {
 
 class VideoEngine {
   private sources: Map<string, VideoSource> = new Map();
+  private sortedSourcesCache: VideoSource[] = [];
+  private needsSort: boolean = true;
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private animationId: number | null = null;
@@ -181,7 +183,11 @@ class VideoEngine {
 
   private getInteraction(x: number, y: number): { id: string, type: 'drag' | 'resize' } | null {
     if (!this.canvas) return null;
-    const sourcesArr = Array.from(this.sources.values()).sort((a, b) => b.zIndex - a.zIndex);
+    if (this.needsSort) {
+      this.sortedSourcesCache = Array.from(this.sources.values()).sort((a, b) => a.zIndex - b.zIndex);
+      this.needsSort = false;
+    }
+    const sourcesArr = [...this.sortedSourcesCache].reverse();
     for (const source of sourcesArr) {
       if (!source.active) continue;
       const vw = source.videoElement.videoWidth;
@@ -233,6 +239,7 @@ class VideoEngine {
           const source = this.sources.get(sourceId);
           if (source && source.zIndex <= maxZ) {
             source.zIndex = maxZ + 1;
+            this.needsSort = true;
             if (this.onUpdateSource) this.onUpdateSource(sourceId, { zIndex: source.zIndex });
           }
         }
@@ -256,6 +263,7 @@ class VideoEngine {
          // Modify Z-Index
          const step = e.deltaY > 0 ? -1 : 1;
          source.zIndex += step;
+         this.needsSort = true;
          if (this.onUpdateSource) this.onUpdateSource(sourceId, { zIndex: source.zIndex });
       } else {
          // Modify Scale
@@ -288,6 +296,7 @@ class VideoEngine {
           if (Math.abs(deltaY) > 5) {
             const zChange = deltaY > 0 ? -1 : 1;
             source.zIndex += zChange;
+            this.needsSort = true;
             if (this.onUpdateSource) this.onUpdateSource(this.draggedSourceId, { zIndex: source.zIndex });
             this.lastMouse.y = pt.y; // Limit speed
           }
@@ -344,6 +353,7 @@ class VideoEngine {
     };
 
     this.sources.set(id, source);
+    this.needsSort = true;
     return source;
   }
 
@@ -353,6 +363,7 @@ class VideoEngine {
       source.stream.getTracks().forEach(t => t.stop());
       source.videoElement.pause();
       this.sources.delete(id);
+      this.needsSort = true;
     }
   }
 
@@ -360,6 +371,9 @@ class VideoEngine {
     const source = this.sources.get(id);
     if (source) {
       Object.assign(source, update);
+      if ('zIndex' in update) {
+        this.needsSort = true;
+      }
     }
   }
 
@@ -375,7 +389,12 @@ class VideoEngine {
       this.ctx.fillStyle = '#000';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-      Array.from(this.sources.values()).sort((a, b) => a.zIndex - b.zIndex).forEach(source => {
+      if (this.needsSort) {
+        this.sortedSourcesCache = Array.from(this.sources.values()).sort((a, b) => a.zIndex - b.zIndex);
+        this.needsSort = false;
+      }
+
+      this.sortedSourcesCache.forEach(source => {
         if (!source.active || !this.ctx) return;
 
         // Apply pulse modulation if latched
