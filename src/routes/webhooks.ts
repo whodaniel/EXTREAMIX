@@ -29,9 +29,9 @@ const RC_WEBHOOK_AUTH = process.env.REVENUECAT_WEBHOOK_AUTH || '';
 
 function verifyWebhookAuth(req: Request): boolean {
   if (!RC_WEBHOOK_AUTH) {
-    // If no auth configured, skip verification (dev mode)
-    console.warn('[RC Webhook] No REVENUECAT_WEBHOOK_AUTH set - skipping verification');
-    return true;
+    // If no auth configured, fail securely to prevent bypasses
+    console.warn('[RC Webhook] No REVENUECAT_WEBHOOK_AUTH set - denying request');
+    return false;
   }
   const authHeader = req.headers['authorization'];
   if (!authHeader) return false;
