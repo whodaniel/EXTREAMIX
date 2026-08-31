@@ -44,7 +44,8 @@ router.get("/:domain/records", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to retrieve DNS records" });
+      console.error("Porkbun API Error (Retrieve):", data.message);
+      res.status(400).json({ error: "Failed to retrieve DNS records" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
@@ -83,7 +84,8 @@ router.post("/:domain/records", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to create DNS record" });
+      console.error("Porkbun API Error (Create):", data.message);
+      res.status(400).json({ error: "Failed to create DNS record" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
@@ -117,7 +119,8 @@ router.delete("/:domain/records/:id", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to delete DNS record" });
+      console.error("Porkbun API Error (Delete):", data.message);
+      res.status(400).json({ error: "Failed to delete DNS record" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
