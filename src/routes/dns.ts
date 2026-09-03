@@ -8,7 +8,8 @@ router.use((req, res, next) => {
   const providedPassword = req.headers['x-admin-password'];
   
   if (!adminPassword) {
-    return res.status(500).json({ error: "ADMIN_PASSWORD not configured on server" });
+    console.error("ADMIN_PASSWORD not configured on server");
+    return res.status(500).json({ error: "Internal server error" });
   }
   
   if (providedPassword !== adminPassword) {
@@ -25,7 +26,8 @@ router.get("/:domain/records", async (req, res) => {
   const secretapikey = process.env.PORKBUN_SECRET_KEY;
 
   if (!apikey || !secretapikey) {
-    return res.status(500).json({ error: "Porkbun API keys are not configured on the server." });
+    console.error("Porkbun API keys are not configured on the server.");
+    return res.status(500).json({ error: "Internal server error" });
   }
 
   try {
@@ -44,7 +46,8 @@ router.get("/:domain/records", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to retrieve DNS records" });
+      console.error("Porkbun API Error:", data.message);
+      res.status(400).json({ error: "Failed to retrieve DNS records" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
@@ -60,7 +63,8 @@ router.post("/:domain/records", async (req, res) => {
   const secretapikey = process.env.PORKBUN_SECRET_KEY;
 
   if (!apikey || !secretapikey) {
-    return res.status(500).json({ error: "Porkbun API keys are not configured." });
+    console.error("Porkbun API keys are not configured.");
+    return res.status(500).json({ error: "Internal server error" });
   }
 
   try {
@@ -83,7 +87,8 @@ router.post("/:domain/records", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to create DNS record" });
+      console.error("Porkbun API Error:", data.message);
+      res.status(400).json({ error: "Failed to create DNS record" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
@@ -98,7 +103,8 @@ router.delete("/:domain/records/:id", async (req, res) => {
   const secretapikey = process.env.PORKBUN_SECRET_KEY;
 
   if (!apikey || !secretapikey) {
-    return res.status(500).json({ error: "Porkbun API keys are not configured." });
+    console.error("Porkbun API keys are not configured.");
+    return res.status(500).json({ error: "Internal server error" });
   }
 
   try {
@@ -117,7 +123,8 @@ router.delete("/:domain/records/:id", async (req, res) => {
     if (data.status === "SUCCESS") {
       res.json(data);
     } else {
-      res.status(400).json({ error: data.message || "Failed to delete DNS record" });
+      console.error("Porkbun API Error:", data.message);
+      res.status(400).json({ error: "Failed to delete DNS record" });
     }
   } catch (error: any) {
     console.error("Porkbun API Error:", error);
