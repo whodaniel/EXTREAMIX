@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 
-const router = Router();
+const router = express.Router();
 
 /**
  * RevenueCat Webhook Handler
@@ -29,9 +30,8 @@ const RC_WEBHOOK_AUTH = process.env.REVENUECAT_WEBHOOK_AUTH || '';
 
 function verifyWebhookAuth(req: Request): boolean {
   if (!RC_WEBHOOK_AUTH) {
-    // If no auth configured, skip verification (dev mode)
-    console.warn('[RC Webhook] No REVENUECAT_WEBHOOK_AUTH set - skipping verification');
-    return true;
+    console.error('[RC Webhook] REVENUECAT_WEBHOOK_AUTH not set - denying access securely.');
+    return false;
   }
   const authHeader = req.headers['authorization'];
   if (!authHeader) return false;
@@ -48,7 +48,11 @@ router.post('/revenuecat', async (req: Request, res: Response) => {
   try {
     let event = req.body;
     if (Buffer.isBuffer(req.body)) {
-      event = JSON.parse(req.body.toString('utf8'));
+      try {
+        event = JSON.parse(req.body.toString('utf8'));
+      } catch (error) {
+        return res.status(400).json({ error: "Invalid JSON payload" });
+      }
     }
 
     // RevenueCat v2 webhooks send events in an array under "events"
