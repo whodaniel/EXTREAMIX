@@ -29,9 +29,9 @@ const RC_WEBHOOK_AUTH = process.env.REVENUECAT_WEBHOOK_AUTH || '';
 
 function verifyWebhookAuth(req: Request): boolean {
   if (!RC_WEBHOOK_AUTH) {
-    // If no auth configured, skip verification (dev mode)
-    console.warn('[RC Webhook] No REVENUECAT_WEBHOOK_AUTH set - skipping verification');
-    return true;
+    // If no auth configured, deny access securely
+    console.warn('[RC Webhook] No REVENUECAT_WEBHOOK_AUTH set - denying access');
+    return false;
   }
   const authHeader = req.headers['authorization'];
   if (!authHeader) return false;
@@ -48,7 +48,12 @@ router.post('/revenuecat', async (req: Request, res: Response) => {
   try {
     let event = req.body;
     if (Buffer.isBuffer(req.body)) {
-      event = JSON.parse(req.body.toString('utf8'));
+      try {
+        event = JSON.parse(req.body.toString('utf8'));
+      } catch (error) {
+        console.warn('[RC Webhook] Invalid JSON payload received');
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
     }
 
     // RevenueCat v2 webhooks send events in an array under "events"
