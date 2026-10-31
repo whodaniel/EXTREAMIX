@@ -24,7 +24,7 @@ async function startServer() {
       try {
         req.body = JSON.parse(req.body.toString('utf8'));
       } catch {
-        // Not JSON, leave as-is
+        return res.status(400).json({ error: 'Invalid JSON body' });
       }
     }
     next();
